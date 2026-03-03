@@ -3,16 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<meta name="theme-color" content="#0b0f14" />
+<meta name="theme-color" content="#ffffff" />
 <title>Pose Overlay PWA</title>
 
 <style>
-:root {
-  --bg:#0b0f14;
-  --panel:#121821;
-  --accent:#4da3ff;
-  --text:#e6edf3;
+:root{
+  --bg:#ffffff;
+  --panel:#f3f5f7;
+  --text:#111827;
+  --muted:#6b7280;
+  --border:#e5e7eb;
+  --accent:#2563eb;
+  --danger:#b91c1c;
+  --canvasBg:#ffffff;
 }
+*{box-sizing:border-box}
 body{
   margin:0;
   font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -22,67 +27,148 @@ body{
 header{
   padding:16px;
   background:var(--panel);
+  border-bottom:1px solid var(--border);
   display:flex;
   justify-content:space-between;
   align-items:center;
 }
 h1{margin:0;font-size:18px;}
-.meta{font-size:12px;opacity:.7;}
-main{padding:16px;}
+.meta{font-size:12px;color:var(--muted);}
+main{padding:16px; max-width:980px; margin:0 auto;}
+.row{display:flex; gap:12px; flex-wrap:wrap; align-items:center;}
+label{font-size:14px;}
+input[type="number"]{width:72px; padding:6px 8px; border:1px solid var(--border); border-radius:8px;}
+input[type="file"]{max-width:100%;}
 button{
   background:var(--accent);
   border:none;
-  color:black;
+  color:white;
   padding:10px 16px;
-  border-radius:8px;
-  font-weight:600;
+  border-radius:10px;
+  font-weight:650;
 }
-input{margin-bottom:12px;}
+button:disabled{opacity:.5}
+.small{font-size:12px;color:var(--muted); margin-top:6px;}
 canvas{
   width:100%;
-  background:black;
+  background:var(--canvasBg);
   border-radius:12px;
-  margin-top:16px;
+  border:1px solid var(--border);
+  margin-top:14px;
 }
 .progress{
   margin-top:10px;
   font-size:13px;
-  opacity:.8;
+  color:var(--muted);
 }
+#logWrap{
+  margin-top:14px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+}
+#logHeader{
+  padding:10px 12px;
+  background:var(--panel);
+  border-bottom:1px solid var(--border);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+}
+#logHeader strong{font-size:13px;}
+#log{
+  padding:10px 12px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  font-size:12px;
+  line-height:1.4;
+  white-space:pre-wrap;
+  max-height:240px;
+  overflow:auto;
+  background:#fff;
+}
+.bad{color:var(--danger); font-weight:700;}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Pose Overlay</h1>
-  <div class="meta">v0.1.0 · <span id="status">idle</span></div>
+  <div class="meta">v0.1.1 · <span id="status">idle</span></div>
 </header>
 
 <main>
-  <input type="file" id="videoInput" accept="video/*" />
-  <br/>
-  <label>Sample FPS:
-    <input type="number" id="fps" value="5" min="1" max="30" style="width:60px;">
-  </label>
-  <br/><br/>
-  <button id="processBtn">Process Video</button>
+  <div class="row">
+    <input type="file" id="videoInput" accept="video/*" />
+    <label>Sample FPS:
+      <input type="number" id="fps" value="5" min="1" max="30">
+    </label>
+    <button id="processBtn">Process</button>
+  </div>
+  <div class="small">Tip: for iPad stability, start with 3–5 FPS.</div>
+
   <div class="progress" id="progress"></div>
   <canvas id="outputCanvas"></canvas>
+
+  <div id="logWrap">
+    <div id="logHeader">
+      <strong>Debug log</strong>
+      <div class="row">
+        <button id="copyLogBtn" type="button" style="padding:8px 10px; border-radius:10px;">Copy</button>
+        <button id="clearLogBtn" type="button" style="padding:8px 10px; border-radius:10px; background:#111827;">Clear</button>
+      </div>
+    </div>
+    <div id="log"></div>
+  </div>
 </main>
 
 <script type="module">
 import { PoseLandmarker, FilesetResolver } from
-"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+
+const VERSION = "v0.1.1";
 
 const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
+const logEl = document.getElementById("log");
 const canvas = document.getElementById("outputCanvas");
 const ctx = canvas.getContext("2d");
 
-let poseLandmarker;
+const processBtn = document.getElementById("processBtn");
+const videoInput = document.getElementById("videoInput");
 
-async function initPose() {
-  statusEl.textContent = "loading model...";
+let poseLandmarker = null;
+
+function log(msg, kind="info"){
+  const t = new Date().toISOString().slice(11,19);
+  const line = `[${t}] ${msg}\n`;
+  if (kind === "error") {
+    logEl.innerHTML += `<span class="bad">${escapeHtml(line)}</span>`;
+  } else {
+    logEl.textContent += line;
+  }
+  logEl.scrollTop = logEl.scrollHeight;
+  console.log(msg);
+}
+function escapeHtml(s){
+  return s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+}
+function setStatus(s){ statusEl.textContent = s; log(`status: ${s}`); }
+
+document.getElementById("clearLogBtn").onclick = () => { logEl.textContent = ""; };
+document.getElementById("copyLogBtn").onclick = async () => {
+  try{
+    await navigator.clipboard.writeText(logEl.textContent);
+    log("copied log to clipboard");
+  }catch(e){
+    log("clipboard copy failed (iOS can block this): " + (e?.message || e), "error");
+  }
+};
+
+async function initPose(){
+  setStatus("loading model...");
+  const t0 = performance.now();
+
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
   );
@@ -96,55 +182,37 @@ async function initPose() {
     numPoses: 1
   });
 
-  statusEl.textContent = "ready";
+  const ms = Math.round(performance.now() - t0);
+  log(`model loaded in ${ms} ms`);
+  setStatus("ready");
 }
 
-await initPose();
+function waitEvent(target, eventName){
+  return new Promise(resolve => {
+    const handler = () => {
+      target.removeEventListener(eventName, handler);
+      resolve();
+    };
+    target.addEventListener(eventName, handler, { once:true });
+  });
+}
 
-document.getElementById("processBtn").onclick = async () => {
-  const fileInput = document.getElementById("videoInput");
-  if (!fileInput.files.length) return;
-
-  const fps = parseInt(document.getElementById("fps").value);
-  const file = fileInput.files[0];
-  const video = document.createElement("video");
-  video.src = URL.createObjectURL(file);
-  video.muted = true;
-  await video.play();
-  await new Promise(r => video.onloadedmetadata = r);
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+function setupCanvasForVideo(video){
+  // Ensure real pixel size is set (CSS scales it visually)
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
   ctx.clearRect(0,0,canvas.width,canvas.height);
+  // faint background so overlays are visible even with thin lines
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  log(`canvas set to ${canvas.width}x${canvas.height}`);
+}
 
-  const duration = video.duration;
-  const step = 1 / fps;
-
-  statusEl.textContent = "processing...";
-  let time = 0;
-  let frameCount = 0;
-
-  while (time < duration) {
-    video.currentTime = time;
-    await new Promise(r => video.onseeked = r);
-
-    const result = poseLandmarker.detectForVideo(video, time*1000);
-
-    if (result.landmarks.length > 0) {
-      drawSkeleton(result.landmarks[0], 0.08); // low alpha for overlay
-    }
-
-    frameCount++;
-    progressEl.textContent = `Frame ${frameCount} @ ${time.toFixed(2)}s`;
-    time += step;
-  }
-
-  statusEl.textContent = "done";
-};
-
-function drawSkeleton(landmarks, alpha) {
-  ctx.strokeStyle = `rgba(77,163,255,${alpha})`;
+function drawSkeleton(landmarks, alpha){
+  // Draw joints + bones so it's obvious something happened
   ctx.lineWidth = 2;
+  ctx.strokeStyle = `rgba(37,99,235,${alpha})`;     // blue
+  ctx.fillStyle   = `rgba(17,24,39,${Math.min(1, alpha + 0.15)})`; // dark dots
 
   const connections = [
     [11,13],[13,15],
@@ -156,45 +224,195 @@ function drawSkeleton(landmarks, alpha) {
     [24,26],[26,28]
   ];
 
-  connections.forEach(([a,b])=>{
-    const x1 = landmarks[a].x * canvas.width;
-    const y1 = landmarks[a].y * canvas.height;
-    const x2 = landmarks[b].x * canvas.width;
-    const y2 = landmarks[b].y * canvas.height;
+  for (const [a,b] of connections){
+    const A = landmarks[a], B = landmarks[b];
+    if (!A || !B) continue;
+    const x1 = A.x * canvas.width,  y1 = A.y * canvas.height;
+    const x2 = B.x * canvas.width,  y2 = B.y * canvas.height;
     ctx.beginPath();
     ctx.moveTo(x1,y1);
     ctx.lineTo(x2,y2);
     ctx.stroke();
-  });
+  }
+
+  // draw keypoints (subset keeps it light)
+  const keypoints = [0,11,12,13,14,15,16,23,24,25,26,27,28];
+  for (const i of keypoints){
+    const p = landmarks[i];
+    if (!p) continue;
+    const x = p.x * canvas.width, y = p.y * canvas.height;
+    ctx.beginPath();
+    ctx.arc(x, y, 2.2, 0, Math.PI*2);
+    ctx.fill();
+  }
 }
 
-/* ---------- Minimal PWA setup ---------- */
+// Process using requestVideoFrameCallback (works better on iOS than seeking)
+async function processVideoFile(file, sampleFps){
+  if (!poseLandmarker) throw new Error("PoseLandmarker not initialized");
 
-// Inline manifest
+  setStatus("preparing video...");
+  progressEl.textContent = "";
+
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.src = url;
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.crossOrigin = "anonymous"; // harmless for local blob; helps if ever used with remote
+
+  // iOS: wait for metadata so width/height/duration exist
+  await waitEvent(video, "loadedmetadata");
+  log(`video: ${video.videoWidth}x${video.videoHeight}, duration=${video.duration.toFixed(2)}s`);
+
+  setupCanvasForVideo(video);
+
+  const step = 1 / Math.max(1, sampleFps);
+  let nextSampleTime = 0;
+  let framesSeen = 0;
+  let samplesTried = 0;
+  let posesDrawn = 0;
+
+  // IMPORTANT: start playback from 0
+  video.currentTime = 0;
+  await waitEvent(video, "seeked");
+
+  setStatus("processing...");
+  processBtn.disabled = true;
+
+  // Play (must be user-gesture initiated; your button click is)
+  try {
+    await video.play();
+  } catch (e) {
+    log("video.play() failed: " + (e?.message || e), "error");
+    throw e;
+  }
+
+  log(`sampling every ${step.toFixed(3)}s (${sampleFps} FPS)`);
+
+  // Use rVFC if available
+  const hasRVFC = typeof video.requestVideoFrameCallback === "function";
+  log(`requestVideoFrameCallback: ${hasRVFC ? "yes" : "no"}`);
+
+  const donePromise = new Promise((resolve, reject) => {
+    function finish(ok, err){
+      try { video.pause(); } catch {}
+      URL.revokeObjectURL(url);
+      processBtn.disabled = false;
+      if (ok) resolve();
+      else reject(err);
+    }
+
+    function onEnded(){
+      finish(true);
+    }
+    video.addEventListener("ended", onEnded, { once:true });
+
+    async function tick(now, metadata){
+      try{
+        framesSeen++;
+
+        const t = metadata?.mediaTime ?? video.currentTime; // seconds
+        // Sample at fixed step
+        if (t + 1e-6 >= nextSampleTime && t <= video.duration + 1e-3){
+          samplesTried++;
+          nextSampleTime += step;
+
+          // mediapipe wants timestamp in ms
+          const tsMs = Math.round(t * 1000);
+
+          const result = poseLandmarker.detectForVideo(video, tsMs);
+
+          if (result?.landmarks?.length){
+            posesDrawn++;
+            // Higher alpha so it's clearly visible
+            drawSkeleton(result.landmarks[0], 0.18);
+          }
+
+          progressEl.textContent =
+            `time ${t.toFixed(2)}s · samples ${samplesTried} · poses ${posesDrawn}`;
+        }
+
+        // Continue until ended
+        if (!video.paused && !video.ended){
+          if (hasRVFC) {
+            video.requestVideoFrameCallback(tick);
+          } else {
+            // fallback: timer-based sampling
+            setTimeout(() => tick(performance.now(), { mediaTime: video.currentTime }), 30);
+          }
+        }
+      }catch(err){
+        log("processing error: " + (err?.message || err), "error");
+        finish(false, err);
+      }
+    }
+
+    if (hasRVFC) video.requestVideoFrameCallback(tick);
+    else tick(performance.now(), { mediaTime: 0 });
+  });
+
+  await donePromise;
+
+  setStatus("done");
+  log(`done. framesSeen=${framesSeen}, samplesTried=${samplesTried}, posesDrawn=${posesDrawn}`);
+  if (posesDrawn === 0){
+    log("No poses were drawn. Try: lower resolution video, higher contrast subject, or increase Sample FPS.", "error");
+  }
+}
+
+processBtn.onclick = async () => {
+  try{
+    const file = videoInput.files?.[0];
+    if (!file){
+      log("no file selected", "error");
+      return;
+    }
+    const fps = parseInt(document.getElementById("fps").value || "5", 10);
+    log(`starting process: ${file.name} (${Math.round(file.size/1024/1024)} MB), fps=${fps}`);
+    await processVideoFile(file, fps);
+  }catch(e){
+    setStatus("error");
+    log(e?.stack || (e?.message || String(e)), "error");
+  }
+};
+
+// Init on load
+log(`app ${VERSION} boot`);
+initPose().catch(e => {
+  setStatus("error");
+  log("model init failed: " + (e?.message || e), "error");
+});
+
+/* ---------- Minimal PWA setup (single-file) ---------- */
+
+// Inline manifest via Blob URL
 const manifest = {
   name: "Pose Overlay",
   short_name: "Pose",
   start_url: ".",
   display: "standalone",
-  background_color: "#0b0f14",
-  theme_color: "#0b0f14"
+  background_color: "#ffffff",
+  theme_color: "#ffffff"
 };
-const blob = new Blob([JSON.stringify(manifest)], {type:"application/json"});
-const manifestURL = URL.createObjectURL(blob);
-document.querySelector('link[rel="manifest"]')?.remove();
-const link = document.createElement("link");
-link.rel="manifest";
-link.href=manifestURL;
-document.head.appendChild(link);
+const manifestBlob = new Blob([JSON.stringify(manifest)], { type:"application/json" });
+const manifestURL = URL.createObjectURL(manifestBlob);
+const m = document.createElement("link");
+m.rel = "manifest";
+m.href = manifestURL;
+document.head.appendChild(m);
 
-// Inline service worker
+// Minimal service worker (cache-first would need extra work; this is just for installability)
 if ("serviceWorker" in navigator) {
   const swCode = `
     self.addEventListener("install", e => self.skipWaiting());
+    self.addEventListener("activate", e => self.clients.claim());
     self.addEventListener("fetch", e => {});
   `;
-  const swBlob = new Blob([swCode], {type:"text/javascript"});
-  navigator.serviceWorker.register(URL.createObjectURL(swBlob));
+  const swBlob = new Blob([swCode], { type:"text/javascript" });
+  const swURL = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swURL).catch(() => {});
 }
 </script>
 
