@@ -1,239 +1,1063 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<meta name="theme-color" content="#ffffff" />
-<title>Pose Overlay PWA</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Dual Athlete Multi-Video + Vakaros Viewer</title>
 
-<style>
-:root{
-  --bg:#ffffff;
-  --panel:#f3f5f7;
-  --text:#111827;
-  --muted:#6b7280;
-  --border:#e5e7eb;
-  --accent:#2563eb;
-  --danger:#b91c1c;
-  --canvasBg:#ffffff;
-}
-*{box-sizing:border-box}
-body{
-  margin:0;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  background:var(--bg);
-  color:var(--text);
-}
-header{
-  padding:16px;
-  background:var(--panel);
-  border-bottom:1px solid var(--border);
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-}
-h1{margin:0;font-size:18px;}
-.meta{font-size:12px;color:var(--muted);}
-main{padding:16px; max-width:980px; margin:0 auto;}
-.row{display:flex; gap:12px; flex-wrap:wrap; align-items:center;}
-label{font-size:14px;}
-input[type="number"]{width:78px; padding:6px 8px; border:1px solid var(--border); border-radius:8px;}
-input[type="file"]{max-width:100%;}
-button{
-  background:var(--accent);
-  border:none;
-  color:white;
-  padding:10px 16px;
-  border-radius:10px;
-  font-weight:650;
-}
-button:disabled{opacity:.5}
-.small{font-size:12px;color:var(--muted); margin-top:6px; line-height:1.3;}
-canvas{
-  width:100%;
-  background:var(--canvasBg);
-  border-radius:12px;
-  border:1px solid var(--border);
-  margin-top:14px;
-}
-.progress{
-  margin-top:10px;
-  font-size:13px;
-  color:var(--muted);
-}
-#logWrap{
-  margin-top:14px;
-  border:1px solid var(--border);
-  border-radius:12px;
-  overflow:hidden;
-}
-#logHeader{
-  padding:10px 12px;
-  background:var(--panel);
-  border-bottom:1px solid var(--border);
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:12px;
-}
-#logHeader strong{font-size:13px;}
-#log{
-  padding:10px 12px;
-  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-  font-size:12px;
-  line-height:1.4;
-  white-space:pre-wrap;
-  max-height:240px;
-  overflow:auto;
-  background:#fff;
-}
-.bad{color:var(--danger); font-weight:700;}
-.toggle{
-  display:inline-flex; align-items:center; gap:8px;
-  padding:6px 10px; border:1px solid var(--border);
-  border-radius:999px; background:#fff;
-}
-.toggle input{transform:scale(1.15)}
-</style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;}
+    html,body{height:100%;margin:0;background:#0b0f14;color:#e6edf3;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+
+    .wrap{height:100%;display:grid;grid-template-columns:1fr 1fr;
+      grid-template-rows:1fr auto auto;gap:10px;padding:10px;}
+
+    .panel{background:#111826;border:1px solid #223047;border-radius:10px;}
+    .nopad{padding:0;overflow:hidden;}
+
+    .left{display:flex;flex-direction:column;gap:6px;padding:10px;}
+
+    .bottom-bar{grid-column:1/-1;background:#111826;border:1px solid #223047;
+      border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;}
+
+    .file-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .file-row label{font-weight:bold;white-space:nowrap;}
+    .file-row input[type="file"]{min-width:0;}
+
+    .fstat{font-size:11px;line-height:1.3;}
+    .fstat .ok{color:#66bb6a;} .fstat .miss{color:#ff7043;}
+
+    .red-label{color:#ef5350;} .blue-label{color:#42a5f5;}
+
+    .ctrl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    input[type="range"]{flex:1;min-width:80px;}
+
+    button{background:#0b1220;color:#e6edf3;border:1px solid #223047;
+      border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap;}
+    button:hover{border-color:#35507a;}
+
+    .stats-row{display:flex;gap:12px;flex-wrap:wrap;}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
+    .small{font-size:12px;}
+    code{background:#0b1220;padding:2px 6px;border-radius:6px;}
+
+    .vid-stack{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;}
+    .vid-box{flex:1;min-height:250px;position:relative;border-radius:10px;overflow:hidden;display:flex;}
+    .red-frame{border:3px solid #e53935;} .blue-frame{border:3px solid #1e88e5;}
+    .vid-box video{position:absolute;top:0;left:0;width:100%;height:100%;
+      object-fit:contain;background:#000;display:none;}
+
+    .blk{position:absolute;top:0;left:0;width:100%;height:100%;background:#000;
+      display:flex;align-items:center;justify-content:center;
+      color:#555;font-size:13px;z-index:5;pointer-events:none;}
+
+    #mapW{position:relative;width:100%;height:100%;}
+    #map{width:100%;height:100%;}
+
+    .arrow-icon{background:none !important;border:none !important;}
+    .arrow-svg{transform-origin:center center;}
+
+    .overlay{position:absolute;top:10px;right:10px;z-index:1000;
+      background:rgba(10,16,26,0.88);border:1px solid rgba(80,120,170,0.35);
+      border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.45;
+      backdrop-filter:blur(4px);max-width:70%;pointer-events:none;}
+    .overlay hr{border:none;border-top:1px solid #223047;margin:6px 0;}
+
+    .sog-bar{grid-column:1/-1;background:#111826;border:1px solid #223047;
+      border-radius:10px;padding:6px 12px;display:flex;flex-direction:column;gap:2px;}
+    .sog-bar .sog-label{font-size:10px;opacity:0.6;}
+    #sogCanvas{width:100%;height:54px;border-radius:4px;cursor:crosshair;display:block;}
+
+    /* ===== Pose overlay (MediaPipe) ===== */
+    .pose-canvas{position:absolute;top:0;left:0;width:100%;height:100%;
+      z-index:6;pointer-events:none;display:none;}
+    .pose-on .pose-canvas{display:block;}
+  </style>
 </head>
 <body>
+  <div class="wrap">
+    <!-- ===== LEFT PANEL (VIDEOS + CONTROLS) ===== -->
+    <div class="left panel">
+      <!-- transport controls -->
+      <div class="ctrl-row">
+        <button id="bk10">-10 s</button>
+        <button id="ppBtn">&#9654; Play</button>
+        <button id="fw10">+10 s</button>
+        <input id="scrub" type="range" min="0" max="0" step="0.1" value="0">
+        <span class="mono small" id="tDisp">0:00 / 0:00</span>
+      </div>
 
-<header>
-  <h1>Pose Overlay</h1>
-  <div class="meta">v0.1.3 · <span id="status">idle</span></div>
-</header>
+      <div class="stats-row mono small">
+        <span style="color:#ef5350;">Clips&#x2081;: <code id="nc1">0</code></span>
+        <span style="color:#ef9a9a;">Vak&#x2081;: <code id="nk1">0</code></span>
+        <span style="color:#42a5f5;">Clips&#x2082;: <code id="nc2">0</code></span>
+        <span style="color:#90caf9;">Vak&#x2082;: <code id="nk2">0</code></span>
+      </div>
 
-<main>
-  <div class="row">
-    <input type="file" id="videoInput" accept="video/*" />
-    <label>Sample FPS:
-      <input type="number" id="fps" value="5" min="1" max="30">
-    </label>
-
-    <label class="toggle" title="Turbo uses fast playback + sampling (evenly distributed).">
-      <input type="checkbox" id="turbo" checked>
-      Turbo
-    </label>
-
-    <label title="Upper bound for playback rate in Turbo mode.">
-      Max speed:
-      <input type="number" id="maxRate" value="8" min="1" max="16" step="1">
-    </label>
-
-    <button id="processBtn">Process</button>
-  </div>
-
-  <div class="small">
-    Turbo now uses <b>fast playback</b> (not per-sample seeking), which avoids iPad/Safari keyframe-seek issues and keeps detections evenly distributed.
-    If your device can’t keep up, lower Max speed or Sample FPS.
-  </div>
-
-  <div class="progress" id="progress"></div>
-  <canvas id="outputCanvas"></canvas>
-
-  <div id="logWrap">
-    <div id="logHeader">
-      <strong>Debug log</strong>
-      <div class="row">
-        <button id="copyLogBtn" type="button" style="padding:8px 10px; border-radius:10px;">Copy</button>
-        <button id="clearLogBtn" type="button" style="padding:8px 10px; border-radius:10px; background:#111827;">Clear</button>
+      <!-- dual video panes -->
+      <div class="vid-stack">
+        <div class="vid-box red-frame" id="vc1">
+          <div class="blk" id="blk1"><span>No data at this time</span></div>
+          <canvas class="pose-canvas" id="poseCanvas1"></canvas>
+        </div>
+        <div class="vid-box blue-frame" id="vc2">
+          <div class="blk" id="blk2"><span>No data at this time</span></div>
+          <canvas class="pose-canvas" id="poseCanvas2"></canvas>
+        </div>
       </div>
     </div>
-    <div id="log"></div>
+
+    <!-- ===== RIGHT PANEL (MAP) ===== -->
+    <div class="panel nopad">
+      <div id="mapW">
+        <div id="map"></div>
+        <div class="overlay mono">
+          <div>UTC: <code id="oUTC">-</code></div>
+          <hr>
+          <div style="color:#ef5350;font-weight:bold;">Athlete 1 (Red)</div>
+          <div>Clip: <code id="o1clip">-</code></div>
+          <div>GPS: <code id="o1gps">-</code></div>
+          <div>Vakaros: <code id="o1vak">-</code></div>
+          <hr>
+          <div style="color:#42a5f5;font-weight:bold;">Athlete 2 (Blue)</div>
+          <div>Clip: <code id="o2clip">-</code></div>
+          <div>GPS: <code id="o2gps">-</code></div>
+          <div>Vakaros: <code id="o2vak">-</code></div>
+          <hr>
+          <div class="small" style="opacity:0.7;">
+            Solid lines = Vakaros tracks.<br>
+            Dashed lines = GoPro GPS tracks.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== BOTTOM: SOG timeseries ===== -->
+    <div class="sog-bar" id="sogBar" style="display:none;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="sog-label mono" style="flex:1;">SOG (m/s) — <span style="color:#ef5350;">Red</span> / <span style="color:#42a5f5;">Blue</span>  — click or drag to scrub</span>
+        <button id="sogZoomIn" title="Zoom in" style="padding:2px 8px;">+</button>
+        <button id="sogZoomOut" title="Zoom out" style="padding:2px 8px;">&minus;</button>
+        <button id="sogZoomReset" title="Reset zoom" style="padding:2px 8px;font-size:10px;">1:1</button>
+      </div>
+      <canvas id="sogCanvas" height="54"></canvas>
+    </div>
+
+    <!-- ===== BOTTOM: File imports ===== -->
+    <div class="bottom-bar">
+      <div class="file-row">
+        <label>Import all videos:</label>
+        <input id="vfAll" type="file" accept="video/mp4" multiple>
+        <label style="margin-left:18px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="hideGoPro"> Hide GoPro GPS tracks
+        </label>
+        <label style="margin-left:18px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="fadeTracks"> Fade tracks (±60 s window)
+        </label>
+
+        <label style="margin-left:18px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="poseEnable"> Pose overlay
+        </label>
+        <label style="margin-left:10px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="poseRed" checked> Red
+        </label>
+        <label style="margin-left:6px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="poseBlue" checked> Blue
+        </label>
+        <label style="margin-left:12px;white-space:nowrap;">
+          Pose FPS <input id="poseFps" type="number" min="1" max="30" value="5"
+            style="width:64px;margin-left:6px;background:#0b1220;color:#e6edf3;border:1px solid #223047;border-radius:8px;padding:4px 6px;">
+        </label>
+        <label style="margin-left:12px;white-space:nowrap;" title="When Pose overlay is enabled, this sets the maximum playback rate the pose engine may request while playing. It won't break sync; it's a cap.">
+          Pose max× <input id="poseMaxRate" type="number" min="1" max="16" value="8"
+            style="width:64px;margin-left:6px;background:#0b1220;color:#e6edf3;border:1px solid #223047;border-radius:8px;padding:4px 6px;">
+        </label>
+        <button id="poseWarmup" title="Loads the MediaPipe model (first load can take a few seconds)."
+          style="margin-left:12px;padding:6px 10px;">Load Pose</button>
+        <button id="poseClear" title="Clears the current pose drawings."
+          style="padding:6px 10px;">Clear Pose</button>
+        <span class="mono small" id="poseStat" style="opacity:0.7;">Pose: off</span>
+      </div>
+      <div class="fstat mono" id="fsAll" style="flex-basis:100%;"></div>
+    </div>
   </div>
-</main>
 
-<script type="module">
-import { PoseLandmarker, FilesetResolver } from
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+<script>
+// ======================== Embedded data ========================
+// NOTE: If you use the Python generator, it will replace these placeholders.
+// If you open standalone, replace these manually with your dataset JSON objects.
+const ds1 = __DS1_JSON__;   // {segments:[{name,gps,epochMin,epochMax},], vakaros:{track:[.]}}
+const ds2 = __DS2_JSON__;
 
-const VERSION = "v0.1.3";
+const vakTrack1 = (ds1.vakaros && ds1.vakaros.track) || [];
+const vakTrack2 = (ds2.vakaros && ds2.vakaros.track) || [];
+const vakEpochs1 = vakTrack1.map(p => p.ts);
+const vakEpochs2 = vakTrack2.map(p => p.ts);
 
-const statusEl = document.getElementById("status");
-const progressEl = document.getElementById("progress");
-const logEl = document.getElementById("log");
-const canvas = document.getElementById("outputCanvas");
-const ctx = canvas.getContext("2d");
+// Stats
+const singleMode = ds2.segments.length === 0;
+document.getElementById('nc1').textContent = ds1.segments.length;
+document.getElementById('nk1').textContent = vakTrack1.length;
+document.getElementById('nc2').textContent = ds2.segments.length;
+document.getElementById('nk2').textContent = vakTrack2.length;
 
-const processBtn = document.getElementById("processBtn");
-const videoInput = document.getElementById("videoInput");
-const turboChk = document.getElementById("turbo");
+// Hide blue UI elements in single-athlete mode
+if (singleMode) {
+  document.getElementById('vc2').style.display = 'none';
+  // Grow red video box
+  document.getElementById('vc1').style.flex = '1';
+  // Hide blue stats
+  document.querySelectorAll('.stats-row span').forEach(el => {
+    if (el.style.color === 'rgb(66, 165, 245)' || el.style.color === 'rgb(144, 202, 249)')
+      el.style.display = 'none';
+  });
+  // Hide blue overlay section
+  const overlayHrs = document.querySelectorAll('.overlay hr');
+  const o2header = document.querySelector('.overlay div[style*="42a5f5"]');
+  if (o2header) {
+    // Hide from second <hr> onward (blue section)
+    let hide = false;
+    o2header.parentElement.childNodes.forEach(n => {
+      if (n === overlayHrs[1]) hide = true;
+      if (hide && n.style !== undefined) n.style.display = 'none';
+      if (hide && n.nodeType === 1) n.style.display = 'none';
+    });
+  }
+}
 
-let poseLandmarker = null;
+// Pre-compute per-segment lookup arrays
+function initSegments(ds) {
+  ds.segments.forEach(seg => {
+    seg.epochs = seg.gps.map(p => p.ts);
+    seg.vTimes = seg.gps.map(p => p.t);
+    seg.el = null;          // <video> element (created below)
+    seg.loaded = false;
+    seg.pSeek = 0;          // programmatic seek counter
+  });
+}
+initSegments(ds1);
+initSegments(ds2);
 
-function log(msg, kind="info"){
-  const t = new Date().toISOString().slice(11,19);
-  const line = `[${t}] ${msg}\n`;
-  if (kind === "error") {
-    logEl.innerHTML += `<span class="bad">${escapeHtml(line)}</span>`;
+// Collect all GPS points per dataset for polylines
+function allGps(ds) {
+  const pts = [];
+  ds.segments.forEach(s => s.gps.forEach(p => pts.push(p)));
+  pts.sort((a,b) => a.ts - b.ts);
+  return pts;
+}
+const allGps1 = allGps(ds1);
+const allGps2 = allGps(ds2);
+
+// Global epoch range (union of all tracks)
+const allEp = [].concat(
+  allGps1.map(p=>p.ts), allGps2.map(p=>p.ts),
+  vakEpochs1, vakEpochs2
+);
+const epochMin = Math.min.apply(null, allEp);
+const epochMax = Math.max.apply(null, allEp);
+const totalDur = epochMax - epochMin;
+
+// ======================== Utilities ========================
+function lerp(a,b,t){ return a + (b-a)*t; }
+function clamp(x,a,b){ return Math.max(a, Math.min(b,x)); }
+
+function bisect(arr, x) {
+  let lo=0, hi=arr.length;
+  while (lo < hi) {
+    const mid = (lo+hi)>>1;
+    if (arr[mid] < x) lo = mid+1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function interpPos(track, epochs, t) {
+  if (!epochs.length) return null;
+  if (t <= epochs[0]) return track[0];
+  if (t >= epochs[epochs.length-1]) return track[track.length-1];
+  const i = bisect(epochs, t);
+  const t0 = epochs[i-1], t1 = epochs[i];
+  const p0 = track[i-1], p1 = track[i];
+  const u = (t - t0) / (t1 - t0);
+  return {lat: lerp(p0.lat,p1.lat,u), lon: lerp(p0.lon,p1.lon,u), ts:t};
+}
+
+function interpDsGps(allGps, t) {
+  if (!allGps.length) return null;
+  const epochs = allGps.map(p=>p.ts);
+  return interpPos(allGps, epochs, t);
+}
+
+function epochToVTime(epochs, vTimes, ep) {
+  if (ep <= epochs[0]) return vTimes[0];
+  if (ep >= epochs[epochs.length-1]) return vTimes[vTimes.length-1];
+  const i = bisect(epochs, ep);
+  const e0 = epochs[i-1], e1 = epochs[i];
+  const v0 = vTimes[i-1], v1 = vTimes[i];
+  const u = (ep - e0) / (e1 - e0);
+  return lerp(v0, v1, u);
+}
+
+function vTimeToEpoch(epochs, vTimes, vt) {
+  if (vt <= vTimes[0]) return epochs[0];
+  if (vt >= vTimes[vTimes.length-1]) return epochs[epochs.length-1];
+  const i = bisect(vTimes, vt);
+  const v0 = vTimes[i-1], v1 = vTimes[i];
+  const e0 = epochs[i-1], e1 = epochs[i];
+  const u = (vt - v0) / (v1 - v0);
+  return lerp(e0, e1, u);
+}
+
+function fmtElapsed(s) {
+  s = Math.max(0, s);
+  const m = Math.floor(s/60);
+  const ss = Math.floor(s%60).toString().padStart(2,'0');
+  return m + ':' + ss;
+}
+function fmtEpochUTC(ep) {
+  return new Date(ep*1000).toISOString().replace('T',' ').replace('.000Z','Z');
+}
+function fmtLL(pos) {
+  return pos ? pos.lat.toFixed(6)+', '+pos.lon.toFixed(6) : '-';
+}
+
+// ======================== Map ========================
+const map = L.map('map', {zoomControl:true});
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+// Polylines: Vakaros = solid bright, GoPro = dashed lighter
+const vakLine1 = vakTrack1.length
+  ? L.polyline(vakTrack1.map(p=>[p.lat,p.lon]),{color:'#e53935',weight:3,opacity:0.85}).addTo(map) : null;
+const mp4Line1 = allGps1.length
+  ? L.polyline(allGps1.map(p=>[p.lat,p.lon]),{color:'#ef9a9a',weight:3,opacity:0.55,dashArray:'6 4'}).addTo(map) : null;
+const vakLine2 = vakTrack2.length
+  ? L.polyline(vakTrack2.map(p=>[p.lat,p.lon]),{color:'#1e88e5',weight:3,opacity:0.85}).addTo(map) : null;
+const mp4Line2 = allGps2.length
+  ? L.polyline(allGps2.map(p=>[p.lat,p.lon]),{color:'#90caf9',weight:3,opacity:0.55,dashArray:'6 4'}).addTo(map) : null;
+
+// ======================== Fade-track support ========================
+const greyVak1 = vakTrack1.length
+  ? L.polyline(vakTrack1.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25}).addTo(map) : null;
+const greyMp41 = allGps1.length
+  ? L.polyline(allGps1.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25,dashArray:'4 3'}).addTo(map) : null;
+const greyVak2 = vakTrack2.length
+  ? L.polyline(vakTrack2.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25}).addTo(map) : null;
+const greyMp42 = allGps2.length
+  ? L.polyline(allGps2.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25,dashArray:'4 3'}).addTo(map) : null;
+[greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{if(l) map.removeLayer(l);});
+
+const FADE_WIN = 60;
+const FADE_OUTER = 15;
+const FADE_INNER = 15;
+
+function makeFadeSet(color, weight, dashArr) {
+  const opts = {weight, interactive:false};
+  if (dashArr) opts.dashArray = dashArr;
+  return {
+    ultraFadeIn:  L.polyline([], {...opts, color, opacity:0.08}),
+    fadeIn:       L.polyline([], {...opts, color, opacity:0.18}),
+    solid:        L.polyline([], {...opts, color, opacity:0.75}),
+    fadeOut:      L.polyline([], {...opts, color, opacity:0.18}),
+    ultraFadeOut: L.polyline([], {...opts, color, opacity:0.08}),
+  };
+}
+const fadeVak1 = makeFadeSet('#e53935', 4, null);
+const fadeMp41 = makeFadeSet('#ef9a9a', 4, '6 4');
+const fadeVak2 = makeFadeSet('#1e88e5', 4, null);
+const fadeMp42 = makeFadeSet('#90caf9', 4, '6 4');
+
+function addFadeSet(fs) {
+  map.addLayer(fs.ultraFadeIn);
+  map.addLayer(fs.fadeIn);
+  map.addLayer(fs.solid);
+  map.addLayer(fs.fadeOut);
+  map.addLayer(fs.ultraFadeOut);
+}
+function removeFadeSet(fs) {
+  map.removeLayer(fs.ultraFadeIn);
+  map.removeLayer(fs.fadeIn);
+  map.removeLayer(fs.solid);
+  map.removeLayer(fs.fadeOut);
+  map.removeLayer(fs.ultraFadeOut);
+}
+function setLinePoints(line, pts) {
+  line.setLatLngs(pts.map(p=>[p.lat,p.lon]));
+}
+function sliceByEpoch(track, epochs, lo, hi) {
+  if (!track.length) return [];
+  const i0 = bisect(epochs, lo);
+  const i1 = bisect(epochs, hi);
+  return track.slice(Math.max(0,i0-1), Math.min(track.length, i1+1));
+}
+
+let fadeMode = false;
+function enableFade(){
+  [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.addLayer(l); });
+  if (vakLine1) map.removeLayer(vakLine1);
+  if (mp4Line1) map.removeLayer(mp4Line1);
+  if (vakLine2) map.removeLayer(vakLine2);
+  if (mp4Line2) map.removeLayer(mp4Line2);
+  addFadeSet(fadeVak1); addFadeSet(fadeMp41);
+  addFadeSet(fadeVak2); addFadeSet(fadeMp42);
+}
+function disableFade(){
+  [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.removeLayer(l); });
+  removeFadeSet(fadeVak1); removeFadeSet(fadeMp41);
+  removeFadeSet(fadeVak2); removeFadeSet(fadeMp42);
+  if (vakLine1) map.addLayer(vakLine1);
+  if (mp4Line1) map.addLayer(mp4Line1);
+  if (vakLine2) map.addLayer(vakLine2);
+  if (mp4Line2) map.addLayer(mp4Line2);
+}
+const allGps1Epochs = allGps1.map(p=>p.ts);
+const allGps2Epochs = allGps2.map(p=>p.ts);
+function updateFadeTracks(ep){
+  const lo = ep - (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
+  const hi = ep + (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
+
+  function upd(fs, track, epochs){
+    if (!track.length) return;
+    const ultraInLo  = ep - (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
+    const ultraInHi  = ep - (FADE_WIN/2 + FADE_INNER);
+    const fadeInLo   = ultraInHi;
+    const fadeInHi   = ep - (FADE_WIN/2);
+    const solidLo    = fadeInHi;
+    const solidHi    = ep + (FADE_WIN/2);
+    const fadeOutLo  = solidHi;
+    const fadeOutHi  = ep + (FADE_WIN/2 + FADE_INNER);
+    const ultraOutLo = fadeOutHi;
+    const ultraOutHi = ep + (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
+
+    setLinePoints(fs.ultraFadeIn,  sliceByEpoch(track, epochs, ultraInLo, ultraInHi));
+    setLinePoints(fs.fadeIn,       sliceByEpoch(track, epochs, fadeInLo, fadeInHi));
+    setLinePoints(fs.solid,        sliceByEpoch(track, epochs, solidLo, solidHi));
+    setLinePoints(fs.fadeOut,      sliceByEpoch(track, epochs, fadeOutLo, fadeOutHi));
+    setLinePoints(fs.ultraFadeOut, sliceByEpoch(track, epochs, ultraOutLo, ultraOutHi));
+  }
+
+  upd(fadeVak1, vakTrack1, vakEpochs1);
+  upd(fadeMp41, allGps1,   allGps1Epochs);
+  upd(fadeVak2, vakTrack2, vakEpochs2);
+  upd(fadeMp42, allGps2,   allGps2Epochs);
+}
+
+// Fit map view
+const bounds = [];
+[vakTrack1, allGps1, vakTrack2, allGps2].forEach(tr => tr.forEach(p=>bounds.push([p.lat,p.lon])));
+if (bounds.length) map.fitBounds(bounds, {padding:[20,20]});
+
+// Markers
+const mp4Dot1 = allGps1.length ? L.circleMarker([allGps1[0].lat,allGps1[0].lon],{radius:6,color:'#ef9a9a',fillColor:'#ef9a9a',fillOpacity:0.9}).addTo(map) : null;
+const mp4Dot2 = allGps2.length ? L.circleMarker([allGps2[0].lat,allGps2[0].lon],{radius:6,color:'#90caf9',fillColor:'#90caf9',fillOpacity:0.9}).addTo(map) : null;
+
+function arrowIcon(color){
+  return L.divIcon({
+    className:'arrow-icon',
+    html:`<svg class="arrow-svg" width="28" height="28" viewBox="0 0 28 28">
+      <path d="M14 2 L18 14 L14 12 L10 14 Z" fill="${color}" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
+      <circle cx="14" cy="14" r="1.5" fill="rgba(0,0,0,0.4)"/>
+    </svg>`,
+    iconSize:[28,28], iconAnchor:[14,14]
+  });
+}
+const vakArrow1 = vakTrack1.length ? L.marker([vakTrack1[0].lat,vakTrack1[0].lon],{icon:arrowIcon('#e53935')}).addTo(map) : null;
+const vakArrow2 = vakTrack2.length ? L.marker([vakTrack2[0].lat,vakTrack2[0].lon],{icon:arrowIcon('#1e88e5')}).addTo(map) : null;
+
+function updateDot(dot, track, ep){
+  if (!dot || !track.length) return;
+  const epochs = track.map(p=>p.ts);
+  const p = interpPos(track, epochs, ep);
+  if (p) dot.setLatLng([p.lat,p.lon]);
+}
+function updateArrow(marker, _unused, ep, rotate, track, epochs){
+  if (!marker || !track.length) return;
+  const p = interpPos(track, epochs, ep);
+  if (!p) return;
+  marker.setLatLng([p.lat,p.lon]);
+  if (!rotate) return;
+
+  // Compute heading from neighbor points
+  const i = clamp(bisect(epochs, ep), 1, track.length-1);
+  const a = track[i-1], b = track[i];
+  const dx = (b.lon - a.lon) * Math.cos((a.lat+b.lat)*Math.PI/360);
+  const dy = (b.lat - a.lat);
+  const ang = Math.atan2(dx, dy) * 180/Math.PI; // degrees
+  const el = marker.getElement();
+  if (el) {
+    const svg = el.querySelector('.arrow-svg');
+    if (svg) svg.style.transform = `rotate(${ang}deg)`;
+  }
+}
+
+function onTrackClick(track, e){
+  if (!track.length) return;
+  const latlng = e.latlng;
+  // brute nearest (ok for thinned tracks)
+  let best = 0, bestD = Infinity;
+  for (let i=0;i<track.length;i++){
+    const dx = track[i].lon - latlng.lng;
+    const dy = track[i].lat - latlng.lat;
+    const d = dx*dx + dy*dy;
+    if (d < bestD) { bestD=d; best=i; }
+  }
+  const ep = track[best].ts;
+  if (isFinite(ep)) {
+    if (playing) pauseAll();
+    masterEpoch = clamp(ep, epochMin, epochMax);
+    syncUI();
+  }
+}
+if (mp4Line1) mp4Line1.on('click', e => onTrackClick(allGps1, e));
+if (vakLine1) vakLine1.on('click', e => onTrackClick(vakTrack1, e));
+if (mp4Line2) mp4Line2.on('click', e => onTrackClick(allGps2, e));
+if (vakLine2) vakLine2.on('click', e => onTrackClick(vakTrack2, e));
+
+// ======================== Create <video> elements ========================
+function createVidEls(ds, container, blk) {
+  ds.segments.forEach((seg, i) => {
+    const v = document.createElement('video');
+    v.setAttribute('playsinline','');
+    v.preload = 'auto';
+    container.insertBefore(v, blk);
+    seg.el = v;
+
+    // User-initiated seek → update master clock
+    v.addEventListener('seeked', () => {
+      if (seg.pSeek > 0) { seg.pSeek--; return; }
+      if (v.readyState >= 1) {
+        masterEpoch = vTimeToEpoch(seg.epochs, seg.vTimes, v.currentTime);
+        masterEpoch = Math.max(epochMin, Math.min(epochMax, masterEpoch));
+        syncUI();
+      }
+    });
+  });
+}
+
+const vc1 = document.getElementById('vc1');
+const vc2 = document.getElementById('vc2');
+const blk1 = document.getElementById('blk1');
+const blk2 = document.getElementById('blk2');
+createVidEls(ds1, vc1, blk1);
+createVidEls(ds2, vc2, blk2);
+
+// ======================== File input (unified) ========================
+function loadAllFiles(ev) {
+  const files = Array.from(ev.target.files || []);
+  const nameMap = {};
+  files.forEach(f => { nameMap[f.name.toLowerCase()] = f; });
+  [ds1, ds2].forEach(ds => {
+    ds.segments.forEach(seg => {
+      const key = seg.name.toLowerCase();
+      if (nameMap[key]) {
+        seg.el.src = URL.createObjectURL(nameMap[key]);
+        seg.el.load();
+        seg.loaded = true;
+      }
+    });
+  });
+  updateAllFileStatus();
+}
+
+function updateAllFileStatus() {
+  const parts = [];
+  function add(ds, color, label) {
+    ds.segments.forEach(seg => {
+      const tag = seg.loaded ? 'ok' : 'miss';
+      const icon = seg.loaded ? '&#10003;' : '&#10007;';
+      parts.push('<span class="'+tag+'">'+icon+' '+seg.name+' <span style="color:'+color+';">('+label+')</span></span>');
+    });
+  }
+  add(ds1, '#ef5350', 'Red');
+  add(ds2, '#42a5f5', 'Blue');
+  document.getElementById('fsAll').innerHTML = parts.join(' &nbsp; ');
+}
+
+document.getElementById('vfAll').addEventListener('change', loadAllFiles);
+
+// ======================== Hide GoPro GPS toggle ========================
+let goProGpsHidden = false;
+document.getElementById('hideGoPro').addEventListener('change', function() {
+  goProGpsHidden = this.checked;
+  if (fadeMode) {
+    [mp4Line1, mp4Line2, greyMp41, greyMp42].forEach(l=>{
+      if(!l) return;
+      if(goProGpsHidden) map.removeLayer(l); else map.addLayer(l);
+    });
+    [fadeMp41,fadeMp42].forEach(fs=>{
+      if(goProGpsHidden){
+        map.removeLayer(fs.ultraFadeIn); map.removeLayer(fs.fadeIn); map.removeLayer(fs.solid);
+        map.removeLayer(fs.fadeOut); map.removeLayer(fs.ultraFadeOut);
+      } else {
+        map.addLayer(fs.ultraFadeIn); map.addLayer(fs.fadeIn); map.addLayer(fs.solid);
+        map.addLayer(fs.fadeOut); map.addLayer(fs.ultraFadeOut);
+      }
+    });
   } else {
-    logEl.textContent += line;
+    [mp4Line1, mp4Line2].forEach(l => {
+      if (!l) return;
+      if (goProGpsHidden) map.removeLayer(l); else map.addLayer(l);
+    });
   }
-  logEl.scrollTop = logEl.scrollHeight;
-  console.log(msg);
-}
-function escapeHtml(s){
-  return s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
-}
-function setStatus(s){ statusEl.textContent = s; log(`status: ${s}`); }
+  [mp4Dot1, mp4Dot2].forEach(d => {
+    if (!d) return;
+    if (goProGpsHidden) d.setStyle({opacity:0,fillOpacity:0});
+    else d.setStyle({opacity:1,fillOpacity:0.9});
+  });
+});
 
-document.getElementById("clearLogBtn").onclick = () => { logEl.textContent = ""; };
-document.getElementById("copyLogBtn").onclick = async () => {
-  try{
-    await navigator.clipboard.writeText(logEl.textContent);
-    log("copied log to clipboard");
-  }catch(e){
-    log("clipboard copy failed (iOS can block this): " + (e?.message || e), "error");
+// ======================== Fade tracks toggle ========================
+document.getElementById('fadeTracks').addEventListener('change', function() {
+  fadeMode = this.checked;
+  if (fadeMode) enableFade(); else disableFade();
+});
+
+updateAllFileStatus();
+
+// ======================== Master clock ========================
+let masterEpoch = epochMin;
+let playing = false;
+let lastTs = null;
+
+const ppBtn  = document.getElementById('ppBtn');
+const scrub  = document.getElementById('scrub');
+const tDisp  = document.getElementById('tDisp');
+
+scrub.max = totalDur.toFixed(1);
+tDisp.textContent = '0:00 / ' + fmtElapsed(totalDur);
+
+function playAll()  { playing=true;  lastTs=null; ppBtn.innerHTML='&#9646;&#9646; Pause'; }
+function pauseAll() {
+  playing=false; lastTs=null;
+  ppBtn.innerHTML='&#9654; Play';
+  ds1.segments.forEach(s => { if(s.el && !s.el.paused) s.el.pause(); });
+  ds2.segments.forEach(s => { if(s.el && !s.el.paused) s.el.pause(); });
+}
+ppBtn.addEventListener('click', () => { playing ? pauseAll() : playAll(); });
+
+document.getElementById('bk10').addEventListener('click', () => {
+  if (playing) pauseAll();
+  masterEpoch = Math.max(epochMin, masterEpoch - 10);
+  syncUI();
+});
+document.getElementById('fw10').addEventListener('click', () => {
+  if (playing) pauseAll();
+  masterEpoch = Math.min(epochMax, masterEpoch + 10);
+  syncUI();
+});
+
+// Spacebar play/pause
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+    e.preventDefault();
+    playing ? pauseAll() : playAll();
   }
+});
+
+let scrubbing = false;
+scrub.addEventListener('input', () => {
+  scrubbing = true;
+  if (playing) pauseAll();
+  masterEpoch = epochMin + parseFloat(scrub.value || '0');
+  syncUI();
+});
+scrub.addEventListener('change', () => { scrubbing = false; });
+
+// ======================== Sync logic ========================
+function findActiveSeg(ds) {
+  for (let i = 0; i < ds.segments.length; i++) {
+    if (masterEpoch >= ds.segments[i].epochMin && masterEpoch <= ds.segments[i].epochMax)
+      return i;
+  }
+  return -1;
+}
+
+function syncDataset(ds, blkEl) {
+  const ai = findActiveSeg(ds);
+
+  ds.segments.forEach((seg, i) => {
+    if (i === ai) {
+      seg.el.style.display = 'block';
+      // Sync this video
+      if (seg.loaded && seg.el.readyState >= 1) {
+        const target = epochToVTime(seg.epochs, seg.vTimes, masterEpoch);
+        const drift = Math.abs(seg.el.currentTime - target);
+        if (playing) {
+          if (seg.el.paused) seg.el.play().catch(()=>{});
+          if (drift > 0.5) { seg.pSeek++; seg.el.currentTime = target; }
+        } else {
+          if (!seg.el.paused) seg.el.pause();
+          if (drift > 0.05) { seg.pSeek++; seg.el.currentTime = target; }
+        }
+      }
+    } else {
+      seg.el.style.display = 'none';
+      if (!seg.el.paused) seg.el.pause();
+    }
+  });
+
+  blkEl.style.display = (ai >= 0) ? 'none' : 'flex';
+  return ai;
+}
+
+const oUTC  = document.getElementById('oUTC');
+const o1clip= document.getElementById('o1clip');
+const o1gps = document.getElementById('o1gps');
+const o1vak = document.getElementById('o1vak');
+const o2clip= document.getElementById('o2clip');
+const o2gps = document.getElementById('o2gps');
+const o2vak = document.getElementById('o2vak');
+
+function syncUI() {
+  if (!scrubbing) scrub.value = (masterEpoch - epochMin).toFixed(1);
+  tDisp.textContent = fmtElapsed(masterEpoch - epochMin) + ' / ' + fmtElapsed(totalDur);
+
+  const a1 = syncDataset(ds1, blk1);
+  const a2 = syncDataset(ds2, blk2);
+
+  // Pose overlay hook (added)
+  if (window.__pose && typeof window.__pose.onSync === 'function') {
+    window.__pose.onSync({a1,a2,masterEpoch,ds1,ds2});
+  }
+
+  // Map markers
+  updateDot(mp4Dot1, allGps1, masterEpoch);
+  updateArrow(vakArrow1, null, masterEpoch, true, vakTrack1, vakEpochs1);
+  updateDot(mp4Dot2, allGps2, masterEpoch);
+  updateArrow(vakArrow2, null, masterEpoch, true, vakTrack2, vakEpochs2);
+
+  // Fade-track update
+  if (fadeMode) updateFadeTracks(masterEpoch);
+
+  // Overlay
+  oUTC.textContent = fmtEpochUTC(masterEpoch);
+
+  if (a1 >= 0) {
+    const seg = ds1.segments[a1];
+    o1clip.textContent = seg.name + ' @ ' + epochToVTime(seg.epochs,seg.vTimes,masterEpoch).toFixed(1) + 's';
+    o1gps.textContent  = fmtLL(interpDsGps(allGps1, masterEpoch));
+  } else { o1clip.textContent = '-'; o1gps.textContent = '-'; }
+  o1vak.textContent = fmtLL(interpPos(vakTrack1, vakEpochs1, masterEpoch));
+
+  if (a2 >= 0) {
+    const seg = ds2.segments[a2];
+    o2clip.textContent = seg.name + ' @ ' + epochToVTime(seg.epochs,seg.vTimes,masterEpoch).toFixed(1) + 's';
+    o2gps.textContent  = fmtLL(interpDsGps(allGps2, masterEpoch));
+  } else { o2clip.textContent = '-'; o2gps.textContent = '-'; }
+  o2vak.textContent = fmtLL(interpPos(vakTrack2, vakEpochs2, masterEpoch));
+}
+
+window.__viewer = { get masterEpoch(){return masterEpoch;}, set masterEpoch(v){masterEpoch=v;},
+  get playing(){return playing;}, get epochMin(){return epochMin;}, get epochMax(){return epochMax;},
+  ds1, ds2, syncUI, pauseAll, playAll
 };
 
-async function initPose(){
-  setStatus("loading model...");
-  const t0 = performance.now();
+// ======================== Animation loop ========================
+function tick(ts) {
+  if (playing) {
+    if (lastTs !== null) {
+      masterEpoch += (ts - lastTs) / 1000;
+      if (masterEpoch >= epochMax) { masterEpoch = epochMax; pauseAll(); }
+    }
+    lastTs = ts;
+  }
+  syncUI();
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+syncUI();
 
-  const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-  );
+// ======================== SOG timeseries chart ========================
+(function() {
+  function buildSog(track) {
+    const pts = [];
+    for (const p of track) {
+      if (p.sog !== undefined && p.sog !== null && isFinite(p.sog))
+        pts.push({ts: p.ts, sog: p.sog});
+    }
+    pts.sort((a,b) => a.ts - b.ts);
+    return pts;
+  }
 
-  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-    },
-    runningMode: "VIDEO",
-    numPoses: 1
+  const sog1 = buildSog(vakTrack1);
+  const sog2 = buildSog(vakTrack2);
+  if (sog1.length === 0 && sog2.length === 0) return;
+
+  const sogBar = document.getElementById('sogBar');
+  sogBar.style.display = '';
+
+  const canvas = document.getElementById('sogCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let sogMax = 0;
+  for (const p of sog1) sogMax = Math.max(sogMax, p.sog);
+  for (const p of sog2) sogMax = Math.max(sogMax, p.sog);
+  if (sogMax <= 0) sogMax = 1;
+  sogMax *= 1.1;
+
+  // Zoom state
+  let sogZoom = 1;
+  let sogViewLo = epochMin;
+  let sogViewHi = epochMax;
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.round(r.width));
+    canvas.height = Math.max(1, Math.round(r.height));
+  }
+
+  function xOf(ts) {
+    const frac = (ts - sogViewLo) / (sogViewHi - sogViewLo);
+    return frac * canvas.width;
+  }
+  function yOf(sog) {
+    const frac = sog / sogMax;
+    return canvas.height - frac * canvas.height;
+  }
+
+  function drawLine(series, color) {
+    if (!series.length) return;
+    ctx.beginPath();
+    let started = false;
+    for (const p of series) {
+      if (p.ts < sogViewLo || p.ts > sogViewHi) continue;
+      const x = xOf(p.ts);
+      const y = yOf(p.sog);
+      if (!started) { ctx.moveTo(x,y); started = true; }
+      else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  function renderStatic() {
+    resize();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // grid
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
+    for (let i=1;i<5;i++){
+      const y = i*canvas.height/5;
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
+    }
+
+    drawLine(sog1, "#ef5350");
+    drawLine(sog2, "#42a5f5");
+  }
+
+  function drawCursor() {
+    const x = xOf(masterEpoch);
+    ctx.strokeStyle = "rgba(255,255,255,0.65)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
+  }
+
+  function updateView() {
+    const span = (epochMax - epochMin) / sogZoom;
+    const mid = clamp(masterEpoch, epochMin, epochMax);
+    sogViewLo = clamp(mid - span/2, epochMin, epochMax - span);
+    sogViewHi = sogViewLo + span;
+  }
+
+  window.addEventListener('resize', () => { renderStatic(); drawCursor(); });
+
+  document.getElementById('sogZoomIn').addEventListener('click', () => {
+    sogZoom = Math.min(sogZoom * 2, 64);
+    updateView();
+    renderStatic(); drawCursor();
+  });
+  document.getElementById('sogZoomOut').addEventListener('click', () => {
+    sogZoom = Math.max(sogZoom / 2, 1);
+    updateView();
+    renderStatic(); drawCursor();
+  });
+  document.getElementById('sogZoomReset').addEventListener('click', () => {
+    sogZoom = 1;
+    updateView();
+    renderStatic(); drawCursor();
   });
 
-  const ms = Math.round(performance.now() - t0);
-  log(`model loaded in ${ms} ms`);
-  setStatus("ready");
+  // Drag / click to scrub
+  let sogDragging = false;
+  function sogScrub(e) {
+    const rect = canvas.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const vSpan = sogViewHi - sogViewLo;
+    masterEpoch = sogViewLo + frac * vSpan;
+    masterEpoch = Math.max(epochMin, Math.min(epochMax, masterEpoch));
+    if (playing) pauseAll();
+    syncUI();
+  }
+  canvas.addEventListener('mousedown', e => { sogDragging = true; sogScrub(e); });
+  window.addEventListener('mousemove', e => { if (sogDragging) sogScrub(e); });
+  window.addEventListener('mouseup', () => { sogDragging = false; });
+
+  canvas.addEventListener('touchstart', e => {
+    sogDragging = true;
+    sogScrub(e.touches[0]);
+    e.preventDefault();
+  }, {passive:false});
+  canvas.addEventListener('touchmove', e => {
+    if (sogDragging) { sogScrub(e.touches[0]); e.preventDefault(); }
+  }, {passive:false});
+  canvas.addEventListener('touchend', () => { sogDragging = false; });
+
+  // initial render
+  updateView();
+  renderStatic();
+  const oldSyncUI = syncUI;
+  // keep cursor synced with masterEpoch
+  syncUI = function() {
+    oldSyncUI();
+    updateView();
+    renderStatic();
+    drawCursor();
+  };
+})();
+</script>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+
+/**
+ * Pose overlay for BOTH video panes.
+ *
+ *  - Works with the existing master-clock syncing (no seeking in the pose engine).
+ *  - Evenly sampled by media-time (currentTime) with a fixed Pose FPS.
+ *  - Draws directly to overlay canvases above each pane.
+ */
+
+const UI = {
+  enable: document.getElementById('poseEnable'),
+  red: document.getElementById('poseRed'),
+  blue: document.getElementById('poseBlue'),
+  fps: document.getElementById('poseFps'),
+  maxRate: document.getElementById('poseMaxRate'),
+  warmup: document.getElementById('poseWarmup'),
+  clear: document.getElementById('poseClear'),
+  stat: document.getElementById('poseStat'),
+  c1: document.getElementById('poseCanvas1'),
+  c2: document.getElementById('poseCanvas2'),
+  vc1: document.getElementById('vc1'),
+  vc2: document.getElementById('vc2'),
+};
+
+let poseLandmarker = null;
+let modelLoading = false;
+
+function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
+function now(){ return performance.now(); }
+function setPoseStat(msg){ UI.stat.textContent = "Pose: " + msg; }
+
+function desiredFps(){
+  const v = parseInt(UI.fps.value || "5", 10);
+  return clamp(isFinite(v) ? v : 5, 1, 30);
+}
+function maxRate(){
+  const v = parseInt(UI.maxRate.value || "8", 10);
+  return clamp(isFinite(v) ? v : 8, 1, 16);
 }
 
-function waitEvent(target, eventName){
-  return new Promise(resolve => {
-    const handler = () => {
-      target.removeEventListener(eventName, handler);
-      resolve();
-    };
-    target.addEventListener(eventName, handler, { once:true });
-  });
+async function ensureModel(){
+  if (poseLandmarker) return poseLandmarker;
+  if (modelLoading) return null;
+  modelLoading = true;
+  setPoseStat("loading model…");
+  UI.warmup.disabled = true;
+  try{
+    const t0 = now();
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+    );
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+      },
+      runningMode: "VIDEO",
+      numPoses: 1
+    });
+    const ms = Math.round(now() - t0);
+    setPoseStat("ready ("+ms+" ms)");
+    return poseLandmarker;
+  }catch(e){
+    console.error(e);
+    setPoseStat("ERROR loading model");
+    return null;
+  }finally{
+    modelLoading = false;
+    UI.warmup.disabled = false;
+  }
 }
 
-function setupCanvasForVideo(video){
-  canvas.width = video.videoWidth || 1280;
-  canvas.height = video.videoHeight || 720;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  log(`canvas set to ${canvas.width}x${canvas.height}`);
+function clearCanvas(c){
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+}
+function clearAll(){
+  clearCanvas(UI.c1);
+  clearCanvas(UI.c2);
+}
+UI.clear.addEventListener('click', clearAll);
+
+UI.warmup.addEventListener('click', async () => {
+  await ensureModel();
+  if (UI.enable.checked && poseLandmarker) setPoseStat("on");
+});
+
+UI.enable.addEventListener('change', async () => {
+  if (UI.enable.checked){
+    await ensureModel();
+    if (poseLandmarker){
+      UI.vc1.classList.add('pose-on');
+      UI.vc2.classList.add('pose-on');
+      setPoseStat("on");
+    } else {
+      UI.enable.checked = false;
+      setPoseStat("off");
+    }
+  } else {
+    UI.vc1.classList.remove('pose-on');
+    UI.vc2.classList.remove('pose-on');
+    setPoseStat("off");
+  }
+});
+
+function resizeCanvasToElement(canvas, el){
+  const r = el.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width));
+  const h = Math.max(1, Math.round(r.height));
+  if (canvas.width !== w || canvas.height !== h){
+    canvas.width = w; canvas.height = h;
+  }
 }
 
-function drawSkeleton(landmarks, alpha){
+function containRect(containerW, containerH, contentW, contentH){
+  // object-fit: contain
+  const s = Math.min(containerW / contentW, containerH / contentH);
+  const w = contentW * s, h = contentH * s;
+  const x = (containerW - w) / 2;
+  const y = (containerH - h) / 2;
+  return {x,y,w,h,scale:s};
+}
+
+function drawSkeleton(ctx, rect, landmarks, alpha){
+  const {x,y,w,h} = rect;
+  ctx.save();
+  ctx.globalAlpha = alpha;
   ctx.lineWidth = 2;
-  ctx.strokeStyle = `rgba(37,99,235,${alpha})`;
-  ctx.fillStyle   = `rgba(17,24,39,${Math.min(1, alpha + 0.15)})`;
+  ctx.strokeStyle = "rgba(255,255,255,0.80)";
+  ctx.fillStyle   = "rgba(0,0,0,0.75)";
 
-  const connections = [
+  const conn = [
     [11,13],[13,15],
     [12,14],[14,16],
     [11,12],
@@ -243,194 +1067,115 @@ function drawSkeleton(landmarks, alpha){
     [24,26],[26,28]
   ];
 
-  for (const [a,b] of connections){
-    const A = landmarks[a], B = landmarks[b];
+  for (const [a,b] of conn){
+    const A=landmarks[a], B=landmarks[b];
     if (!A || !B) continue;
-    const x1 = A.x * canvas.width,  y1 = A.y * canvas.height;
-    const x2 = B.x * canvas.width,  y2 = B.y * canvas.height;
+    const x1 = x + A.x * w, y1 = y + A.y * h;
+    const x2 = x + B.x * w, y2 = y + B.y * h;
     ctx.beginPath();
     ctx.moveTo(x1,y1);
     ctx.lineTo(x2,y2);
     ctx.stroke();
   }
 
-  const keypoints = [0,11,12,13,14,15,16,23,24,25,26,27,28];
-  for (const i of keypoints){
-    const p = landmarks[i];
-    if (!p) continue;
-    const x = p.x * canvas.width, y = p.y * canvas.height;
+  const pts=[0,11,12,13,14,15,16,23,24,25,26,27,28];
+  for (const i of pts){
+    const p=landmarks[i];
+    if(!p) continue;
+    const px = x + p.x*w, py = y + p.y*h;
     ctx.beginPath();
-    ctx.arc(x, y, 2.2, 0, Math.PI*2);
+    ctx.arc(px,py,2.2,0,Math.PI*2);
     ctx.fill();
   }
+  ctx.restore();
 }
 
-/**
- * Real-time sampling while playing (evenly distributed in time).
- * Turbo = raise playbackRate so it runs faster than 1×.
- */
-async function processForward(video, sampleFps, turbo, maxRate){
-  const step = 1 / Math.max(1, sampleFps);
-  const duration = video.duration;
-
-  const hasRVFC = typeof video.requestVideoFrameCallback === "function";
-  log(`requestVideoFrameCallback: ${hasRVFC ? "yes" : "no"}`);
-  if (!hasRVFC){
-    throw new Error("This browser lacks requestVideoFrameCallback; iPad Safari should have it. Try updating iPadOS/Safari.");
-  }
-
-  // Reset and configure speed
-  video.pause();
-  video.currentTime = 0;
-  await waitEvent(video, "seeked");
-
-  const targetRate = turbo ? Math.min(Math.max(1, maxRate), 16) : 1;
-  video.playbackRate = targetRate;
-
-  let nextSampleTime = 0;
-  let samplesTried = 0;
-  let posesDrawn = 0;
-
-  const wallT0 = performance.now();
-
-  await video.play();
-
-  await new Promise((resolve, reject) => {
-    video.addEventListener("ended", () => resolve(), { once:true });
-
-    const tick = async (_now, metadata) => {
-      try{
-        const t = metadata.mediaTime; // seconds, precise for current frame
-
-        // sample at fixed step times based on mediaTime (even distribution)
-        if (t + 1e-6 >= nextSampleTime && t <= duration + 1e-3){
-          samplesTried++;
-          // advance in a way that catches up if playback jumps (turbo)
-          const stepsToAdvance = Math.max(1, Math.floor((t - nextSampleTime) / step) + 1);
-          nextSampleTime += stepsToAdvance * step;
-
-          const tsMs = Math.round(t * 1000);
-          const result = poseLandmarker.detectForVideo(video, tsMs);
-          if (result?.landmarks?.length){
-            posesDrawn++;
-            drawSkeleton(result.landmarks[0], 0.18);
-          }
-
-          const elapsed = (performance.now() - wallT0) / 1000;
-          const speed = elapsed > 0 ? (t / elapsed) : 0;
-          progressEl.textContent =
-            `time ${t.toFixed(2)}s / ${duration.toFixed(1)}s · samples ${samplesTried} · poses ${posesDrawn} · ~${speed.toFixed(2)}× (rate=${video.playbackRate}×)`;
-        }
-
-        if (!video.paused && !video.ended){
-          video.requestVideoFrameCallback(tick);
-        }
-      }catch(err){
-        reject(err);
-      }
-    };
-
-    video.requestVideoFrameCallback(tick);
-  });
-
-  video.pause();
-
-  const wallElapsed = (performance.now() - wallT0) / 1000;
-  const avgSpeed = wallElapsed > 0 ? (duration / wallElapsed) : 0;
-
-  log(`forward done. turbo=${turbo}, rate=${targetRate}×, samples=${samplesTried}, poses=${posesDrawn}, wall=${wallElapsed.toFixed(2)}s, avg~${avgSpeed.toFixed(2)}×`);
-  progressEl.textContent =
-    `done · samples ${samplesTried} · poses ${posesDrawn} · wall ${wallElapsed.toFixed(1)}s · avg ~${avgSpeed.toFixed(2)}×`;
-
-  return { samplesTried, posesDrawn, avgSpeed };
+function getActiveVideo(ds, idx){
+  if (idx == null || idx < 0) return null;
+  const seg = ds.segments[idx];
+  if (!seg || !seg.el) return null;
+  if (!seg.loaded) return null;
+  if (seg.el.readyState < 2) return null;
+  return seg.el;
 }
 
-async function processVideoFile(file, sampleFps, turbo, maxRate){
-  if (!poseLandmarker) throw new Error("PoseLandmarker not initialized");
-
-  setStatus("preparing video...");
-  progressEl.textContent = "";
-
-  const url = URL.createObjectURL(file);
-  const video = document.createElement("video");
-  video.src = url;
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = "auto";
-
-  await waitEvent(video, "loadedmetadata");
-  log(`video: ${video.videoWidth}x${video.videoHeight}, duration=${video.duration.toFixed(2)}s`);
-
-  setupCanvasForVideo(video);
-
-  setStatus(turbo ? "processing (turbo forward)..." : "processing (forward)...");
-  processBtn.disabled = true;
-
-  try{
-    const out = await processForward(video, sampleFps, turbo, maxRate);
-    setStatus("done");
-    if (out.posesDrawn === 0){
-      log("No poses were drawn. Try increasing Sample FPS, getting a closer full-body view, or using a clearer clip.", "error");
-    }
-  } finally {
-    try { video.pause(); } catch {}
-    URL.revokeObjectURL(url);
-    processBtn.disabled = false;
-  }
-}
-
-processBtn.onclick = async () => {
-  try{
-    const file = videoInput.files?.[0];
-    if (!file){
-      log("no file selected", "error");
-      return;
-    }
-    const fps = parseInt(document.getElementById("fps").value || "5", 10);
-    const turbo = !!turboChk.checked;
-    const maxRate = parseInt(document.getElementById("maxRate").value || "8", 10);
-
-    log(`starting: ${file.name} (${Math.round(file.size/1024/1024)} MB), fps=${fps}, turbo=${turbo}, maxRate=${maxRate}×`);
-    await processVideoFile(file, fps, turbo, maxRate);
-  }catch(e){
-    setStatus("error");
-    log(e?.stack || (e?.message || String(e)), "error");
-  }
+const state = {
+  lastSampleT1: -1,
+  lastSampleT2: -1,
+  samples1: 0, samples2: 0,
+  poses1: 0, poses2: 0,
+  lastDrawAt: 0,
 };
 
-log(`app ${VERSION} boot`);
-initPose().catch(e => {
-  setStatus("error");
-  log("model init failed: " + (e?.message || e), "error");
-});
+function detectAndDraw(video, canvas, container, lastKey){
+  resizeCanvasToElement(canvas, container);
+  const ctx = canvas.getContext('2d');
 
-/* ---------- Minimal PWA setup (single-file) ---------- */
-const manifest = {
-  name: "Pose Overlay",
-  short_name: "Pose",
-  start_url: ".",
-  display: "standalone",
-  background_color: "#ffffff",
-  theme_color: "#ffffff"
-};
-const manifestBlob = new Blob([JSON.stringify(manifest)], { type:"application/json" });
-const manifestURL = URL.createObjectURL(manifestBlob);
-const m = document.createElement("link");
-m.rel = "manifest";
-m.href = manifestURL;
-document.head.appendChild(m);
+  // light persistence trail
+  ctx.fillStyle = "rgba(0,0,0,0.06)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-if ("serviceWorker" in navigator) {
-  const swCode = `
-    self.addEventListener("install", e => self.skipWaiting());
-    self.addEventListener("activate", e => self.clients.claim());
-    self.addEventListener("fetch", e => {});
-  `;
-  const swBlob = new Blob([swCode], { type:"text/javascript" });
-  const swURL = URL.createObjectURL(swBlob);
-  navigator.serviceWorker.register(swURL).catch(() => {});
+  const rect = containRect(canvas.width, canvas.height, video.videoWidth || 1, video.videoHeight || 1);
+
+  const fps = desiredFps();
+  const t = video.currentTime;
+  const step = 1 / fps;
+
+  const lastT = state[lastKey];
+  if (lastT >= 0 && (t - lastT) < step) return false;
+  state[lastKey] = t;
+
+  const tsMs = Math.round(t * 1000);
+  const res = poseLandmarker.detectForVideo(video, tsMs);
+  if (res?.landmarks?.length){
+    drawSkeleton(ctx, rect, res.landmarks[0], 0.22);
+    return true;
+  }
+  return false;
 }
+
+// Called by syncUI() (main script)
+window.__pose = {
+  onSync: async ({a1,a2,masterEpoch,ds1,ds2}) => {
+    if (!UI.enable.checked) return;
+
+    if (!poseLandmarker) {
+      await ensureModel();
+      if (!poseLandmarker) return;
+      UI.vc1.classList.add('pose-on');
+      UI.vc2.classList.add('pose-on');
+      setPoseStat("on");
+    }
+
+    // Guard playbackRate if something else changes it
+    const cap = maxRate();
+    const v1 = getActiveVideo(ds1, a1);
+    const v2 = getActiveVideo(ds2, a2);
+    [v1,v2].forEach(v=>{
+      if(!v) return;
+      if(v.playbackRate > cap) v.playbackRate = cap;
+      if(v.playbackRate < 0.25) v.playbackRate = 0.25;
+    });
+
+    // Throttle overall pose work (keep iPad responsive)
+    const tnow = now();
+    if (tnow - state.lastDrawAt < 10) return;
+    state.lastDrawAt = tnow;
+
+    if (v1 && UI.red.checked) {
+      state.samples1++;
+      if (detectAndDraw(v1, UI.c1, UI.vc1, 'lastSampleT1')) state.poses1++;
+    }
+    if (v2 && UI.blue.checked) {
+      state.samples2++;
+      if (detectAndDraw(v2, UI.c2, UI.vc2, 'lastSampleT2')) state.poses2++;
+    }
+
+    setPoseStat(
+      `on · fps=${desiredFps()} · red ${state.poses1}/${state.samples1} · blue ${state.poses2}/${state.samples2}`
+    );
+  }
+};
 </script>
-
 </body>
 </html>
