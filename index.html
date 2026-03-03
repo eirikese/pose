@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#0b0f14" />
+<title>Pose Overlay PWA</title>
+
+<style>
+:root {
+  --bg:#0b0f14;
+  --panel:#121821;
+  --accent:#4da3ff;
+  --text:#e6edf3;
+}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+header{
+  padding:16px;
+  background:var(--panel);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+h1{margin:0;font-size:18px;}
+.meta{font-size:12px;opacity:.7;}
+main{padding:16px;}
+button{
+  background:var(--accent);
+  border:none;
+  color:black;
+  padding:10px 16px;
+  border-radius:8px;
+  font-weight:600;
+}
+input{margin-bottom:12px;}
+canvas{
+  width:100%;
+  background:black;
+  border-radius:12px;
+  margin-top:16px;
+}
+.progress{
+  margin-top:10px;
+  font-size:13px;
+  opacity:.8;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pose Overlay</h1>
+  <div class="meta">v0.1.0 · <span id="status">idle</span></div>
+</header>
+
+<main>
+  <input type="file" id="videoInput" accept="video/*" />
+  <br/>
+  <label>Sample FPS:
+    <input type="number" id="fps" value="5" min="1" max="30" style="width:60px;">
+  </label>
+  <br/><br/>
+  <button id="processBtn">Process Video</button>
+  <div class="progress" id="progress"></div>
+  <canvas id="outputCanvas"></canvas>
+</main>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver } from
+"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+
+const statusEl = document.getElementById("status");
+const progressEl = document.getElementById("progress");
+const canvas = document.getElementById("outputCanvas");
+const ctx = canvas.getContext("2d");
+
+let poseLandmarker;
+
+async function initPose() {
+  statusEl.textContent = "loading model...";
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+  );
+
+  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+    },
+    runningMode: "VIDEO",
+    numPoses: 1
+  });
+
+  statusEl.textContent = "ready";
+}
+
+await initPose();
+
+document.getElementById("processBtn").onclick = async () => {
+  const fileInput = document.getElementById("videoInput");
+  if (!fileInput.files.length) return;
+
+  const fps = parseInt(document.getElementById("fps").value);
+  const file = fileInput.files[0];
+  const video = document.createElement("video");
+  video.src = URL.createObjectURL(file);
+  video.muted = true;
+  await video.play();
+  await new Promise(r => video.onloadedmetadata = r);
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const duration = video.duration;
+  const step = 1 / fps;
+
+  statusEl.textContent = "processing...";
+  let time = 0;
+  let frameCount = 0;
+
+  while (time < duration) {
+    video.currentTime = time;
+    await new Promise(r => video.onseeked = r);
+
+    const result = poseLandmarker.detectForVideo(video, time*1000);
+
+    if (result.landmarks.length > 0) {
+      drawSkeleton(result.landmarks[0], 0.08); // low alpha for overlay
+    }
+
+    frameCount++;
+    progressEl.textContent = `Frame ${frameCount} @ ${time.toFixed(2)}s`;
+    time += step;
+  }
+
+  statusEl.textContent = "done";
+};
+
+function drawSkeleton(landmarks, alpha) {
+  ctx.strokeStyle = `rgba(77,163,255,${alpha})`;
+  ctx.lineWidth = 2;
+
+  const connections = [
+    [11,13],[13,15],
+    [12,14],[14,16],
+    [11,12],
+    [23,24],
+    [11,23],[12,24],
+    [23,25],[25,27],
+    [24,26],[26,28]
+  ];
+
+  connections.forEach(([a,b])=>{
+    const x1 = landmarks[a].x * canvas.width;
+    const y1 = landmarks[a].y * canvas.height;
+    const x2 = landmarks[b].x * canvas.width;
+    const y2 = landmarks[b].y * canvas.height;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.stroke();
+  });
+}
+
+/* ---------- Minimal PWA setup ---------- */
+
+// Inline manifest
+const manifest = {
+  name: "Pose Overlay",
+  short_name: "Pose",
+  start_url: ".",
+  display: "standalone",
+  background_color: "#0b0f14",
+  theme_color: "#0b0f14"
+};
+const blob = new Blob([JSON.stringify(manifest)], {type:"application/json"});
+const manifestURL = URL.createObjectURL(blob);
+document.querySelector('link[rel="manifest"]')?.remove();
+const link = document.createElement("link");
+link.rel="manifest";
+link.href=manifestURL;
+document.head.appendChild(link);
+
+// Inline service worker
+if ("serviceWorker" in navigator) {
+  const swCode = `
+    self.addEventListener("install", e => self.skipWaiting());
+    self.addEventListener("fetch", e => {});
+  `;
+  const swBlob = new Blob([swCode], {type:"text/javascript"});
+  navigator.serviceWorker.register(URL.createObjectURL(swBlob));
+}
+</script>
+
+</body>
+</html>
