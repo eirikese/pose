@@ -88,13 +88,19 @@ canvas{
   background:#fff;
 }
 .bad{color:var(--danger); font-weight:700;}
+.toggle{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 10px; border:1px solid var(--border);
+  border-radius:999px; background:#fff;
+}
+.toggle input{transform:scale(1.15)}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Pose Overlay</h1>
-  <div class="meta">v0.1.1 · <span id="status">idle</span></div>
+  <div class="meta">v0.1.2 · <span id="status">idle</span></div>
 </header>
 
 <main>
@@ -103,9 +109,17 @@ canvas{
     <label>Sample FPS:
       <input type="number" id="fps" value="5" min="1" max="30">
     </label>
+
+    <label class="toggle" title="When enabled, the app seeks through the video and processes as fast as decoding allows (often faster than 1x). When disabled, it processes in real-time playback.">
+      <input type="checkbox" id="turbo" checked>
+      Turbo
+    </label>
+
     <button id="processBtn">Process</button>
   </div>
-  <div class="small">Tip: for iPad stability, start with 3–5 FPS.</div>
+  <div class="small">
+    Turbo mode processes as fast as the browser can decode/seek (often faster than 1×). If Turbo misses frames on your device/video, turn it off.
+  </div>
 
   <div class="progress" id="progress"></div>
   <canvas id="outputCanvas"></canvas>
@@ -126,7 +140,7 @@ canvas{
 import { PoseLandmarker, FilesetResolver } from
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
 
-const VERSION = "v0.1.1";
+const VERSION = "v0.1.2";
 
 const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
@@ -136,6 +150,7 @@ const ctx = canvas.getContext("2d");
 
 const processBtn = document.getElementById("processBtn");
 const videoInput = document.getElementById("videoInput");
+const turboChk = document.getElementById("turbo");
 
 let poseLandmarker = null;
 
@@ -197,22 +212,30 @@ function waitEvent(target, eventName){
   });
 }
 
+// Seek helper that won’t hang forever (some iOS videos can be finicky)
+async function seekTo(video, t, timeoutMs = 5000){
+  const start = performance.now();
+  video.currentTime = Math.min(Math.max(t, 0), Math.max(0, video.duration - 0.001));
+  while (true){
+    if (Math.abs(video.currentTime - t) < 0.05 || video.seeking === false) return;
+    if (performance.now() - start > timeoutMs) throw new Error(`seek timeout at t=${t.toFixed(2)}s`);
+    await new Promise(r => setTimeout(r, 10));
+  }
+}
+
 function setupCanvasForVideo(video){
-  // Ensure real pixel size is set (CSS scales it visually)
   canvas.width = video.videoWidth || 1280;
   canvas.height = video.videoHeight || 720;
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  // faint background so overlays are visible even with thin lines
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0,0,canvas.width,canvas.height);
   log(`canvas set to ${canvas.width}x${canvas.height}`);
 }
 
 function drawSkeleton(landmarks, alpha){
-  // Draw joints + bones so it's obvious something happened
   ctx.lineWidth = 2;
-  ctx.strokeStyle = `rgba(37,99,235,${alpha})`;     // blue
-  ctx.fillStyle   = `rgba(17,24,39,${Math.min(1, alpha + 0.15)})`; // dark dots
+  ctx.strokeStyle = `rgba(37,99,235,${alpha})`;
+  ctx.fillStyle   = `rgba(17,24,39,${Math.min(1, alpha + 0.15)})`;
 
   const connections = [
     [11,13],[13,15],
@@ -235,7 +258,6 @@ function drawSkeleton(landmarks, alpha){
     ctx.stroke();
   }
 
-  // draw keypoints (subset keeps it light)
   const keypoints = [0,11,12,13,14,15,16,23,24,25,26,27,28];
   for (const i of keypoints){
     const p = landmarks[i];
@@ -247,8 +269,117 @@ function drawSkeleton(landmarks, alpha){
   }
 }
 
-// Process using requestVideoFrameCallback (works better on iOS than seeking)
-async function processVideoFile(file, sampleFps){
+/**
+ * MODE A (Turbo): seek through timestamps and process as fast as decoding allows.
+ * This can run faster than 1× because we do NOT play the video in real time.
+ */
+async function processTurbo(video, sampleFps){
+  const step = 1 / Math.max(1, sampleFps);
+  const duration = video.duration;
+
+  let samplesTried = 0;
+  let posesDrawn = 0;
+  const t0 = performance.now();
+
+  // start at 0 and pause (we're seeking, not playing)
+  video.pause();
+  await seekTo(video, 0);
+
+  for (let t = 0; t < duration; t += step){
+    await seekTo(video, t);
+
+    const tsMs = Math.round(t * 1000);
+    samplesTried++;
+
+    const result = poseLandmarker.detectForVideo(video, tsMs);
+    if (result?.landmarks?.length){
+      posesDrawn++;
+      drawSkeleton(result.landmarks[0], 0.18);
+    }
+
+    if (samplesTried % 10 === 0){
+      const elapsed = (performance.now() - t0) / 1000;
+      const videoProcessed = Math.min(t, duration);
+      const speed = elapsed > 0 ? (videoProcessed / elapsed) : 0;
+      progressEl.textContent =
+        `samples ${samplesTried} · poses ${posesDrawn} · processed ${videoProcessed.toFixed(1)}s / ${duration.toFixed(1)}s · ~${speed.toFixed(2)}×`;
+      // Yield to UI so iPad doesn't look frozen
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  const elapsed = (performance.now() - t0) / 1000;
+  const speed = elapsed > 0 ? (duration / elapsed) : 0;
+  progressEl.textContent =
+    `done · samples ${samplesTried} · poses ${posesDrawn} · ${elapsed.toFixed(1)}s wall · ~${speed.toFixed(2)}×`;
+  log(`turbo done. samples=${samplesTried}, poses=${posesDrawn}, wall=${elapsed.toFixed(2)}s, speed~${speed.toFixed(2)}×`);
+  return { samplesTried, posesDrawn, speed };
+}
+
+/**
+ * MODE B (Real-time): play and sample with requestVideoFrameCallback (1× or slower).
+ * Good fallback if seeking is unreliable for a particular file/device.
+ */
+async function processRealtime(video, sampleFps){
+  const step = 1 / Math.max(1, sampleFps);
+  let nextSampleTime = 0;
+  let samplesTried = 0;
+  let posesDrawn = 0;
+
+  const hasRVFC = typeof video.requestVideoFrameCallback === "function";
+  log(`requestVideoFrameCallback: ${hasRVFC ? "yes" : "no"}`);
+
+  video.currentTime = 0;
+  await waitEvent(video, "seeked");
+
+  const t0 = performance.now();
+  await video.play();
+
+  await new Promise((resolve, reject) => {
+    function onEnded(){ resolve(); }
+    video.addEventListener("ended", onEnded, { once:true });
+
+    async function tick(now, metadata){
+      try{
+        const t = metadata?.mediaTime ?? video.currentTime;
+        if (t + 1e-6 >= nextSampleTime && t <= video.duration + 1e-3){
+          samplesTried++;
+          nextSampleTime += step;
+
+          const tsMs = Math.round(t * 1000);
+          const result = poseLandmarker.detectForVideo(video, tsMs);
+          if (result?.landmarks?.length){
+            posesDrawn++;
+            drawSkeleton(result.landmarks[0], 0.18);
+          }
+
+          const elapsed = (performance.now() - t0) / 1000;
+          const speed = elapsed > 0 ? (t / elapsed) : 0;
+          progressEl.textContent =
+            `time ${t.toFixed(2)}s · samples ${samplesTried} · poses ${posesDrawn} · ~${speed.toFixed(2)}×`;
+        }
+
+        if (!video.paused && !video.ended){
+          if (hasRVFC) video.requestVideoFrameCallback(tick);
+          else setTimeout(() => tick(performance.now(), { mediaTime: video.currentTime }), 30);
+        }
+      }catch(err){
+        reject(err);
+      }
+    }
+
+    if (hasRVFC) video.requestVideoFrameCallback(tick);
+    else tick(performance.now(), { mediaTime: 0 });
+  });
+
+  video.pause();
+  const elapsed = (performance.now() - t0) / 1000;
+  const speed = elapsed > 0 ? (video.duration / elapsed) : 0;
+  log(`realtime done. samples=${samplesTried}, poses=${posesDrawn}, wall=${elapsed.toFixed(2)}s, avg~${speed.toFixed(2)}×`);
+  return { samplesTried, posesDrawn, speed };
+}
+
+async function processVideoFile(file, sampleFps, turbo){
   if (!poseLandmarker) throw new Error("PoseLandmarker not initialized");
 
   setStatus("preparing video...");
@@ -260,105 +391,28 @@ async function processVideoFile(file, sampleFps){
   video.muted = true;
   video.playsInline = true;
   video.preload = "auto";
-  video.crossOrigin = "anonymous"; // harmless for local blob; helps if ever used with remote
 
-  // iOS: wait for metadata so width/height/duration exist
   await waitEvent(video, "loadedmetadata");
   log(`video: ${video.videoWidth}x${video.videoHeight}, duration=${video.duration.toFixed(2)}s`);
 
   setupCanvasForVideo(video);
 
-  const step = 1 / Math.max(1, sampleFps);
-  let nextSampleTime = 0;
-  let framesSeen = 0;
-  let samplesTried = 0;
-  let posesDrawn = 0;
-
-  // IMPORTANT: start playback from 0
-  video.currentTime = 0;
-  await waitEvent(video, "seeked");
-
-  setStatus("processing...");
+  setStatus(turbo ? "processing (turbo)..." : "processing (realtime)...");
   processBtn.disabled = true;
 
-  // Play (must be user-gesture initiated; your button click is)
-  try {
-    await video.play();
-  } catch (e) {
-    log("video.play() failed: " + (e?.message || e), "error");
-    throw e;
-  }
+  try{
+    let out;
+    if (turbo) out = await processTurbo(video, sampleFps);
+    else out = await processRealtime(video, sampleFps);
 
-  log(`sampling every ${step.toFixed(3)}s (${sampleFps} FPS)`);
-
-  // Use rVFC if available
-  const hasRVFC = typeof video.requestVideoFrameCallback === "function";
-  log(`requestVideoFrameCallback: ${hasRVFC ? "yes" : "no"}`);
-
-  const donePromise = new Promise((resolve, reject) => {
-    function finish(ok, err){
-      try { video.pause(); } catch {}
-      URL.revokeObjectURL(url);
-      processBtn.disabled = false;
-      if (ok) resolve();
-      else reject(err);
+    setStatus("done");
+    if (out.posesDrawn === 0){
+      log("No poses were drawn. Try increasing Sample FPS, using a closer subject, or a clearer full-body view.", "error");
     }
-
-    function onEnded(){
-      finish(true);
-    }
-    video.addEventListener("ended", onEnded, { once:true });
-
-    async function tick(now, metadata){
-      try{
-        framesSeen++;
-
-        const t = metadata?.mediaTime ?? video.currentTime; // seconds
-        // Sample at fixed step
-        if (t + 1e-6 >= nextSampleTime && t <= video.duration + 1e-3){
-          samplesTried++;
-          nextSampleTime += step;
-
-          // mediapipe wants timestamp in ms
-          const tsMs = Math.round(t * 1000);
-
-          const result = poseLandmarker.detectForVideo(video, tsMs);
-
-          if (result?.landmarks?.length){
-            posesDrawn++;
-            // Higher alpha so it's clearly visible
-            drawSkeleton(result.landmarks[0], 0.18);
-          }
-
-          progressEl.textContent =
-            `time ${t.toFixed(2)}s · samples ${samplesTried} · poses ${posesDrawn}`;
-        }
-
-        // Continue until ended
-        if (!video.paused && !video.ended){
-          if (hasRVFC) {
-            video.requestVideoFrameCallback(tick);
-          } else {
-            // fallback: timer-based sampling
-            setTimeout(() => tick(performance.now(), { mediaTime: video.currentTime }), 30);
-          }
-        }
-      }catch(err){
-        log("processing error: " + (err?.message || err), "error");
-        finish(false, err);
-      }
-    }
-
-    if (hasRVFC) video.requestVideoFrameCallback(tick);
-    else tick(performance.now(), { mediaTime: 0 });
-  });
-
-  await donePromise;
-
-  setStatus("done");
-  log(`done. framesSeen=${framesSeen}, samplesTried=${samplesTried}, posesDrawn=${posesDrawn}`);
-  if (posesDrawn === 0){
-    log("No poses were drawn. Try: lower resolution video, higher contrast subject, or increase Sample FPS.", "error");
+  } finally {
+    try { video.pause(); } catch {}
+    URL.revokeObjectURL(url);
+    processBtn.disabled = false;
   }
 }
 
@@ -370,8 +424,9 @@ processBtn.onclick = async () => {
       return;
     }
     const fps = parseInt(document.getElementById("fps").value || "5", 10);
-    log(`starting process: ${file.name} (${Math.round(file.size/1024/1024)} MB), fps=${fps}`);
-    await processVideoFile(file, fps);
+    const turbo = !!turboChk.checked;
+    log(`starting: ${file.name} (${Math.round(file.size/1024/1024)} MB), fps=${fps}, turbo=${turbo}`);
+    await processVideoFile(file, fps, turbo);
   }catch(e){
     setStatus("error");
     log(e?.stack || (e?.message || String(e)), "error");
@@ -386,8 +441,6 @@ initPose().catch(e => {
 });
 
 /* ---------- Minimal PWA setup (single-file) ---------- */
-
-// Inline manifest via Blob URL
 const manifest = {
   name: "Pose Overlay",
   short_name: "Pose",
@@ -403,7 +456,6 @@ m.rel = "manifest";
 m.href = manifestURL;
 document.head.appendChild(m);
 
-// Minimal service worker (cache-first would need extra work; this is just for installability)
 if ("serviceWorker" in navigator) {
   const swCode = `
     self.addEventListener("install", e => self.skipWaiting());
