@@ -1,923 +1,435 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <meta name="theme-color" content="#0b0f14"/>
-  <title>Dual Athlete Viewer (Browser Analysis + Pose)</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" />
+<title>Pose Overlay PWA</title>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <style>
-    *,*::before,*::after{box-sizing:border-box;}
-    html,body{height:100%;margin:0;background:#0b0f14;color:#e6edf3;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
-
-    .wrap{height:100%;display:grid;grid-template-columns:1fr 1fr;
-      grid-template-rows:1fr auto auto auto;gap:10px;padding:10px;}
-
-    .panel{background:#111826;border:1px solid #223047;border-radius:10px;}
-    .nopad{padding:0;overflow:hidden;}
-    .left{display:flex;flex-direction:column;gap:6px;padding:10px;}
-
-    .bottom-bar{grid-column:1/-1;background:#111826;border:1px solid #223047;
-      border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;}
-
-    .analysis-bar{grid-column:1/-1;background:#111826;border:1px solid #223047;
-      border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:8px;}
-
-    .file-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-    .file-row label{font-weight:600;white-space:nowrap;}
-    input[type="file"]{max-width:100%;}
-    input[type="number"]{width:74px;}
-
-    .ctrl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-    input[type="range"]{flex:1;min-width:120px;}
-
-    button{background:#0b1220;color:#e6edf3;border:1px solid #223047;
-      border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap;}
-    button:hover{border-color:#35507a;}
-    button:disabled{opacity:.5;cursor:not-allowed;}
-
-    .stats-row{display:flex;gap:12px;flex-wrap:wrap;}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
-    .small{font-size:12px;}
-    code{background:#0b1220;padding:2px 6px;border-radius:6px;}
-
-    .vid-stack{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;}
-    .vid-box{flex:1;min-height:250px;position:relative;border-radius:10px;overflow:hidden;display:flex;}
-    .red-frame{border:3px solid #e53935;} .blue-frame{border:3px solid #1e88e5;}
-    .vid-box video{position:absolute;top:0;left:0;width:100%;height:100%;
-      object-fit:contain;background:#000;display:none;}
-
-    .blk{position:absolute;top:0;left:0;width:100%;height:100%;background:#000;
-      display:flex;align-items:center;justify-content:center;
-      color:#555;font-size:13px;z-index:5;pointer-events:none;}
-
-    #mapW{position:relative;width:100%;height:100%;}
-    #map{width:100%;height:100%;}
-
-    .overlay{position:absolute;top:10px;right:10px;z-index:1000;
-      background:rgba(10,16,26,0.88);border:1px solid rgba(80,120,170,0.35);
-      border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.45;
-      backdrop-filter:blur(4px);max-width:70%;pointer-events:none;}
-    .overlay hr{border:none;border-top:1px solid #223047;margin:6px 0;}
-
-    .sog-bar{grid-column:1/-1;background:#111826;border:1px solid #223047;
-      border-radius:10px;padding:6px 12px;display:flex;flex-direction:column;gap:2px;}
-    .sog-bar .sog-label{font-size:10px;opacity:0.6;}
-    #sogCanvas{width:100%;height:54px;border-radius:4px;cursor:crosshair;display:block;}
-
-    /* Pose overlay */
-    .pose-canvas{position:absolute;top:0;left:0;width:100%;height:100%;
-      z-index:6;pointer-events:none;display:none;}
-    .pose-on .pose-canvas{display:block;}
-
-    /* Analysis table */
-    table{border-collapse:collapse;width:100%;font-size:12px;}
-    th,td{border-bottom:1px solid #223047;padding:6px 8px;text-align:left;vertical-align:top;}
-    th{opacity:.8;font-weight:700;}
-    select{background:#0b1220;color:#e6edf3;border:1px solid #223047;border-radius:8px;padding:4px 6px;}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #223047;background:#0b1220;font-size:11px;}
-    .ok{color:#66bb6a;} .warn{color:#ffca28;} .bad{color:#ff7043;}
-    .log{max-height:160px;overflow:auto;white-space:pre-wrap;background:#0b1220;border:1px solid #223047;border-radius:10px;padding:10px;}
-  </style>
+<style>
+:root{
+  --bg:#ffffff;
+  --panel:#f3f5f7;
+  --text:#111827;
+  --muted:#6b7280;
+  --border:#e5e7eb;
+  --accent:#2563eb;
+  --danger:#b91c1c;
+  --canvasBg:#ffffff;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+header{
+  padding:16px;
+  background:var(--panel);
+  border-bottom:1px solid var(--border);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+h1{margin:0;font-size:18px;}
+.meta{font-size:12px;color:var(--muted);}
+main{padding:16px; max-width:980px; margin:0 auto;}
+.row{display:flex; gap:12px; flex-wrap:wrap; align-items:center;}
+label{font-size:14px;}
+input[type="number"]{width:78px; padding:6px 8px; border:1px solid var(--border); border-radius:8px;}
+input[type="file"]{max-width:100%;}
+button{
+  background:var(--accent);
+  border:none;
+  color:white;
+  padding:10px 16px;
+  border-radius:10px;
+  font-weight:650;
+}
+button:disabled{opacity:.5}
+.small{font-size:12px;color:var(--muted); margin-top:6px; line-height:1.3;}
+canvas{
+  width:100%;
+  background:var(--canvasBg);
+  border-radius:12px;
+  border:1px solid var(--border);
+  margin-top:14px;
+}
+.progress{
+  margin-top:10px;
+  font-size:13px;
+  color:var(--muted);
+}
+#logWrap{
+  margin-top:14px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+}
+#logHeader{
+  padding:10px 12px;
+  background:var(--panel);
+  border-bottom:1px solid var(--border);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+}
+#logHeader strong{font-size:13px;}
+#log{
+  padding:10px 12px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  font-size:12px;
+  line-height:1.4;
+  white-space:pre-wrap;
+  max-height:240px;
+  overflow:auto;
+  background:#fff;
+}
+.bad{color:var(--danger); font-weight:700;}
+.toggle{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 10px; border:1px solid var(--border);
+  border-radius:999px; background:#fff;
+}
+.toggle input{transform:scale(1.15)}
+</style>
 </head>
-
 <body>
-  <div class="wrap">
-    <!-- LEFT -->
-    <div class="left panel">
-      <div class="ctrl-row">
-        <button id="bk10">-10 s</button>
-        <button id="ppBtn">&#9654; Play</button>
-        <button id="fw10">+10 s</button>
-        <input id="scrub" type="range" min="0" max="0" step="0.1" value="0">
-        <span class="mono small" id="tDisp">0:00 / 0:00</span>
-      </div>
 
-      <div class="stats-row mono small">
-        <span style="color:#ef5350;">Clips&#x2081;: <code id="nc1">0</code></span>
-        <span style="color:#ef9a9a;">Vak&#x2081;: <code id="nk1">0</code></span>
-        <span style="color:#42a5f5;">Clips&#x2082;: <code id="nc2">0</code></span>
-        <span style="color:#90caf9;">Vak&#x2082;: <code id="nk2">0</code></span>
-        <span class="pill mono" id="ver">v1.0.2</span>
-      </div>
+<header>
+  <h1>Pose Overlay</h1>
+  <div class="meta">v0.1.3 · <span id="status">idle</span></div>
+</header>
 
-      <div class="vid-stack">
-        <div class="vid-box red-frame pose-on" id="vc1">
-          <div class="blk" id="blk1"><span>No data at this time</span></div>
-          <canvas class="pose-canvas" id="poseCanvas1"></canvas>
-        </div>
-        <div class="vid-box blue-frame pose-on" id="vc2">
-          <div class="blk" id="blk2"><span>No data at this time</span></div>
-          <canvas class="pose-canvas" id="poseCanvas2"></canvas>
-        </div>
-      </div>
-    </div>
+<main>
+  <div class="row">
+    <input type="file" id="videoInput" accept="video/*" />
+    <label>Sample FPS:
+      <input type="number" id="fps" value="5" min="1" max="30">
+    </label>
 
-    <!-- RIGHT MAP -->
-    <div class="panel nopad">
-      <div id="mapW">
-        <div id="map"></div>
-        <div class="overlay mono">
-          <div>UTC: <code id="oUTC">-</code></div>
-          <hr>
-          <div style="color:#ef5350;font-weight:bold;">Athlete 1 (Red)</div>
-          <div>Clip: <code id="o1clip">-</code></div>
-          <div>GPS: <code id="o1gps">-</code></div>
-          <div>Vakaros: <code id="o1vak">-</code></div>
-          <hr>
-          <div style="color:#42a5f5;font-weight:bold;">Athlete 2 (Blue)</div>
-          <div>Clip: <code id="o2clip">-</code></div>
-          <div>GPS: <code id="o2gps">-</code></div>
-          <div>Vakaros: <code id="o2vak">-</code></div>
-          <hr>
-          <div class="small" style="opacity:0.7;">
-            Solid = Vakaros track · Dashed = GoPro GPS
-          </div>
-        </div>
-      </div>
-    </div>
+    <label class="toggle" title="Turbo uses fast playback + sampling (evenly distributed).">
+      <input type="checkbox" id="turbo" checked>
+      Turbo
+    </label>
 
-    <!-- SOG -->
-    <div class="sog-bar" id="sogBar" style="display:none;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="sog-label mono" style="flex:1;">SOG (m/s) — <span style="color:#ef5350;">Red</span> / <span style="color:#42a5f5;">Blue</span> — click/drag to scrub</span>
-        <button id="sogZoomIn" title="Zoom in" style="padding:2px 8px;">+</button>
-        <button id="sogZoomOut" title="Zoom out" style="padding:2px 8px;">&minus;</button>
-        <button id="sogZoomReset" title="Reset zoom" style="padding:2px 8px;font-size:10px;">1:1</button>
-      </div>
-      <canvas id="sogCanvas" height="54"></canvas>
-    </div>
+    <label title="Upper bound for playback rate in Turbo mode.">
+      Max speed:
+      <input type="number" id="maxRate" value="8" min="1" max="16" step="1">
+    </label>
 
-    <!-- ANALYSIS -->
-    <div class="analysis-bar">
-      <div class="file-row">
-        <label>MP4 files:</label>
-        <input id="mp4Input" type="file" accept="video/mp4" multiple>
-        <button id="analyzeBtn">Analyze MP4 telemetry</button>
-        <span class="mono small" id="analyzeStat" style="opacity:.8;">idle</span>
-      </div>
-
-      <div class="file-row">
-        <label>Vakaros CSV (optional):</label>
-        <input id="vakInput" type="file" accept=".csv,text/csv" multiple>
-        <button id="applyVakBtn">Apply CSV(s)</button>
-        <span class="mono small" id="vakStat" style="opacity:.8;">none</span>
-      </div>
-
-      <div class="small" style="opacity:.85">
-        Open this from <b>HTTPS</b> (GitHub Pages), not <code>file://</code>.<br>
-        1) Select MP4s → <b>Analyze</b> (runs locally).<br>
-        2) Review Red/Blue assignment → <b>Rebuild</b>.<br>
-        3) Import MP4s for playback in the bottom bar (filenames must match).<br>
-      </div>
-
-      <div style="overflow:auto;border:1px solid #223047;border-radius:10px;">
-        <table>
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Assign</th>
-              <th>GPS pts</th>
-              <th>Epoch start</th>
-              <th>Epoch end</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="fileTable"></tbody>
-        </table>
-      </div>
-
-      <div class="log mono" id="log"></div>
-    </div>
-
-    <!-- BOTTOM CONTROLS -->
-    <div class="bottom-bar">
-      <div class="file-row">
-        <label>Import all videos (playback):</label>
-        <input id="vfAll" type="file" accept="video/mp4" multiple>
-
-        <label style="margin-left:10px;cursor:pointer;user-select:none;">
-          <input type="checkbox" id="hideGoPro"> Hide GoPro GPS tracks
-        </label>
-        <label style="margin-left:10px;cursor:pointer;user-select:none;">
-          <input type="checkbox" id="fadeTracks"> Fade tracks (±60 s window)
-        </label>
-
-        <label style="margin-left:14px;cursor:pointer;user-select:none;">
-          <input type="checkbox" id="poseEnable"> Pose overlay
-        </label>
-        <label style="margin-left:6px;cursor:pointer;user-select:none;">
-          <input type="checkbox" id="poseRed" checked> Red
-        </label>
-        <label style="margin-left:6px;cursor:pointer;user-select:none;">
-          <input type="checkbox" id="poseBlue" checked> Blue
-        </label>
-        <label style="margin-left:12px;white-space:nowrap;">
-          Pose FPS <input id="poseFps" type="number" min="1" max="30" value="5">
-        </label>
-        <button id="poseWarmup" style="padding:6px 10px;">Load Pose</button>
-        <button id="poseClear" style="padding:6px 10px;">Clear Pose</button>
-        <span class="mono small" id="poseStat" style="opacity:0.7;">Pose: off</span>
-
-        <button id="rebuildBtn" style="margin-left:auto;">Rebuild datasets from table</button>
-      </div>
-      <div class="mono small" id="fsAll" style="flex-basis:100%;opacity:.9;"></div>
-    </div>
+    <button id="processBtn">Process</button>
   </div>
 
-<script>
-/* =========================
-   Helpers + logger
-========================= */
-const $ = (id)=>document.getElementById(id);
-function clamp(x,a,b){ return Math.max(a, Math.min(b,x)); }
-function lerp(a,b,t){ return a + (b-a)*t; }
-function bisect(arr, x) {
-  let lo=0, hi=arr.length;
-  while (lo < hi) {
-    const mid=(lo+hi)>>1;
-    if (arr[mid] < x) lo=mid+1; else hi=mid;
-  }
-  return lo;
-}
-function fmtElapsed(s){ s=Math.max(0,s); const m=Math.floor(s/60); const ss=Math.floor(s%60).toString().padStart(2,'0'); return m+':'+ss; }
-function fmtEpochUTC(ep){ return new Date(ep*1000).toISOString().replace('T',' ').replace('.000Z','Z'); }
-function fmtLL(pos){ return pos ? pos.lat.toFixed(6)+', '+pos.lon.toFixed(6) : '-'; }
+  <div class="small">
+    Turbo now uses <b>fast playback</b> (not per-sample seeking), which avoids iPad/Safari keyframe-seek issues and keeps detections evenly distributed.
+    If your device can’t keep up, lower Max speed or Sample FPS.
+  </div>
+
+  <div class="progress" id="progress"></div>
+  <canvas id="outputCanvas"></canvas>
+
+  <div id="logWrap">
+    <div id="logHeader">
+      <strong>Debug log</strong>
+      <div class="row">
+        <button id="copyLogBtn" type="button" style="padding:8px 10px; border-radius:10px;">Copy</button>
+        <button id="clearLogBtn" type="button" style="padding:8px 10px; border-radius:10px; background:#111827;">Clear</button>
+      </div>
+    </div>
+    <div id="log"></div>
+  </div>
+</main>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver } from
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+
+const VERSION = "v0.1.3";
+
+const statusEl = document.getElementById("status");
+const progressEl = document.getElementById("progress");
+const logEl = document.getElementById("log");
+const canvas = document.getElementById("outputCanvas");
+const ctx = canvas.getContext("2d");
+
+const processBtn = document.getElementById("processBtn");
+const videoInput = document.getElementById("videoInput");
+const turboChk = document.getElementById("turbo");
+
+let poseLandmarker = null;
+
 function log(msg, kind="info"){
-  const t=new Date().toISOString().slice(11,19);
-  const line=`[${t}] ${msg}\n`;
-  const el=$('log');
-  el.textContent += line;
-  el.scrollTop = el.scrollHeight;
-  (kind==="error"?console.error:console.log)(msg);
-}
-function emptyDS(){ return { segments:[], vakaros:{track:[]} }; }
-
-/* =========================
-   Runtime datasets
-========================= */
-let ds1 = emptyDS(); // Red
-let ds2 = emptyDS(); // Blue
-
-function initSegments(ds){
-  ds.segments.forEach(seg=>{
-    seg.epochs = seg.gps.map(p=>p.ts);
-    seg.vTimes = seg.gps.map(p=>p.t);
-    seg.el = null;
-    seg.loaded = false;
-    seg.pSeek = 0;
-  });
-}
-function allGps(ds){
-  const pts=[];
-  ds.segments.forEach(s=>s.gps.forEach(p=>pts.push(p)));
-  pts.sort((a,b)=>a.ts-b.ts);
-  return pts;
-}
-function interpPos(track, epochs, t){
-  if(!epochs.length) return null;
-  if(t<=epochs[0]) return track[0];
-  if(t>=epochs[epochs.length-1]) return track[track.length-1];
-  const i=bisect(epochs,t);
-  const t0=epochs[i-1], t1=epochs[i];
-  const p0=track[i-1], p1=track[i];
-  const u=(t-t0)/(t1-t0);
-  return {lat:lerp(p0.lat,p1.lat,u), lon:lerp(p0.lon,p1.lon,u), ts:t};
-}
-function epochToVTime(epochs, vTimes, ep){
-  if(ep<=epochs[0]) return vTimes[0];
-  if(ep>=epochs[epochs.length-1]) return vTimes[vTimes.length-1];
-  const i=bisect(epochs,ep);
-  const e0=epochs[i-1], e1=epochs[i];
-  const v0=vTimes[i-1], v1=vTimes[i];
-  const u=(ep-e0)/(e1-e0);
-  return lerp(v0,v1,u);
-}
-function vTimeToEpoch(epochs, vTimes, vt){
-  if(vt<=vTimes[0]) return epochs[0];
-  if(vt>=vTimes[vTimes.length-1]) return epochs[epochs.length-1];
-  const i=bisect(vTimes,vt);
-  const v0=vTimes[i-1], v1=vTimes[i];
-  const e0=epochs[i-1], e1=epochs[i];
-  const u=(vt-v0)/(v1-v0);
-  return lerp(e0,e1,u);
-}
-
-/* =========================
-   Viewer state + UI refs
-========================= */
-const vc1=$('vc1'), vc2=$('vc2'), blk1=$('blk1'), blk2=$('blk2');
-const ppBtn=$('ppBtn'), scrub=$('scrub'), tDisp=$('tDisp');
-const oUTC=$('oUTC'), o1clip=$('o1clip'), o1gps=$('o1gps'), o1vak=$('o1vak'), o2clip=$('o2clip'), o2gps=$('o2gps'), o2vak=$('o2vak');
-
-let epochMin=0, epochMax=0, totalDur=0;
-let masterEpoch=0;
-let playing=false;
-let lastTs=null;
-let scrubbing=false;
-
-let map=null;
-let vakLine1=null, mp4Line1=null, vakLine2=null, mp4Line2=null;
-let mp4Dot1=null, mp4Dot2=null, vakArrow1=null, vakArrow2=null;
-let goProGpsHidden=false;
-let fadeMode=false;
-
-const FADE_WIN=60, FADE_OUTER=15, FADE_INNER=15;
-let greyVak1=null, greyMp41=null, greyVak2=null, greyMp42=null;
-let fadeVak1=null, fadeMp41=null, fadeVak2=null, fadeMp42=null;
-
-let sogInstalled=false;
-
-/* =========================
-   Map helpers
-========================= */
-function arrowIcon(color){
-  return L.divIcon({
-    className:'arrow-icon',
-    html:`<svg class="arrow-svg" width="28" height="28" viewBox="0 0 28 28">
-      <path d="M14 2 L18 14 L14 12 L10 14 Z" fill="${color}" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
-      <circle cx="14" cy="14" r="1.5" fill="rgba(0,0,0,0.4)"/>
-    </svg>`,
-    iconSize:[28,28], iconAnchor:[14,14]
-  });
-}
-function updateArrow(marker, ep, track, epochs){
-  if(!marker || !track.length) return;
-  const p=interpPos(track,epochs,ep);
-  if(!p) return;
-  marker.setLatLng([p.lat,p.lon]);
-  const i=clamp(bisect(epochs,ep),1,track.length-1);
-  const a=track[i-1], b=track[i];
-  const dx=(b.lon-a.lon)*Math.cos((a.lat+b.lat)*Math.PI/360);
-  const dy=(b.lat-a.lat);
-  const ang=Math.atan2(dx,dy)*180/Math.PI;
-  const el=marker.getElement();
-  if(el){
-    const svg=el.querySelector('.arrow-svg');
-    if(svg) svg.style.transform=`rotate(${ang}deg)`;
+  const t = new Date().toISOString().slice(11,19);
+  const line = `[${t}] ${msg}\n`;
+  if (kind === "error") {
+    logEl.innerHTML += `<span class="bad">${escapeHtml(line)}</span>`;
+  } else {
+    logEl.textContent += line;
   }
+  logEl.scrollTop = logEl.scrollHeight;
+  console.log(msg);
 }
-function updateDot(dot, track, ep){
-  if(!dot || !track.length) return;
-  const epochs=track.map(p=>p.ts);
-  const p=interpPos(track,epochs,ep);
-  if(p) dot.setLatLng([p.lat,p.lon]);
+function escapeHtml(s){
+  return s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 }
-function onTrackClick(track, e){
-  if(!track.length) return;
-  const latlng=e.latlng;
-  let best=0, bestD=Infinity;
-  for(let i=0;i<track.length;i++){
-    const dx=track[i].lon-latlng.lng;
-    const dy=track[i].lat-latlng.lat;
-    const d=dx*dx+dy*dy;
-    if(d<bestD){bestD=d;best=i;}
+function setStatus(s){ statusEl.textContent = s; log(`status: ${s}`); }
+
+document.getElementById("clearLogBtn").onclick = () => { logEl.textContent = ""; };
+document.getElementById("copyLogBtn").onclick = async () => {
+  try{
+    await navigator.clipboard.writeText(logEl.textContent);
+    log("copied log to clipboard");
+  }catch(e){
+    log("clipboard copy failed (iOS can block this): " + (e?.message || e), "error");
   }
-  const ep=track[best].ts;
-  if(isFinite(ep)){
-    if(playing) pauseAll();
-    masterEpoch=clamp(ep, epochMin, epochMax);
-    syncUI();
-  }
-}
+};
 
-/* Fade track helpers */
-function makeFadeSet(color, weight, dashArr){
-  const opts={weight,interactive:false};
-  if(dashArr) opts.dashArray=dashArr;
-  return {
-    ultraFadeIn:  L.polyline([], {...opts, color, opacity:0.08}),
-    fadeIn:       L.polyline([], {...opts, color, opacity:0.18}),
-    solid:        L.polyline([], {...opts, color, opacity:0.75}),
-    fadeOut:      L.polyline([], {...opts, color, opacity:0.18}),
-    ultraFadeOut: L.polyline([], {...opts, color, opacity:0.08}),
-  };
-}
-function addFadeSet(fs){ map.addLayer(fs.ultraFadeIn); map.addLayer(fs.fadeIn); map.addLayer(fs.solid); map.addLayer(fs.fadeOut); map.addLayer(fs.ultraFadeOut); }
-function removeFadeSet(fs){ map.removeLayer(fs.ultraFadeIn); map.removeLayer(fs.fadeIn); map.removeLayer(fs.solid); map.removeLayer(fs.fadeOut); map.removeLayer(fs.ultraFadeOut); }
-function setLinePoints(line, pts){ line.setLatLngs(pts.map(p=>[p.lat,p.lon])); }
-function sliceByEpoch(track, epochs, lo, hi){
-  if(!track.length) return [];
-  const i0=bisect(epochs,lo);
-  const i1=bisect(epochs,hi);
-  return track.slice(Math.max(0,i0-1), Math.min(track.length,i1+1));
-}
-function updateFadeTracks(ep, vakTrack1, vakEpochs1, allGps1, allGps1Epochs, vakTrack2, vakEpochs2, allGps2, allGps2Epochs){
-  function upd(fs, track, epochs){
-    if(!track.length) return;
-    const ultraInLo  = ep - (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
-    const ultraInHi  = ep - (FADE_WIN/2 + FADE_INNER);
-    const fadeInLo   = ultraInHi;
-    const fadeInHi   = ep - (FADE_WIN/2);
-    const solidLo    = fadeInHi;
-    const solidHi    = ep + (FADE_WIN/2);
-    const fadeOutLo  = solidHi;
-    const fadeOutHi  = ep + (FADE_WIN/2 + FADE_INNER);
-    const ultraOutLo = fadeOutHi;
-    const ultraOutHi = ep + (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
+async function initPose(){
+  setStatus("loading model...");
+  const t0 = performance.now();
 
-    setLinePoints(fs.ultraFadeIn,  sliceByEpoch(track, epochs, ultraInLo, ultraInHi));
-    setLinePoints(fs.fadeIn,       sliceByEpoch(track, epochs, fadeInLo, fadeInHi));
-    setLinePoints(fs.solid,        sliceByEpoch(track, epochs, solidLo, solidHi));
-    setLinePoints(fs.fadeOut,      sliceByEpoch(track, epochs, fadeOutLo, fadeOutHi));
-    setLinePoints(fs.ultraFadeOut, sliceByEpoch(track, epochs, ultraOutLo, ultraOutHi));
-  }
-  upd(fadeVak1, vakTrack1, vakEpochs1);
-  upd(fadeMp41, allGps1,   allGps1Epochs);
-  upd(fadeVak2, vakTrack2, vakEpochs2);
-  upd(fadeMp42, allGps2,   allGps2Epochs);
-}
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+  );
 
-/* =========================
-   Rebuild viewer from ds1/ds2
-========================= */
-function rebuildMapAndViewer(){
-  pauseAll();
-
-  if(map){
-    map.off();
-    map.remove();
-    map=null;
-  }
-
-  [vc1,vc2].forEach((vc, idx)=>{
-    const blk = idx===0 ? blk1 : blk2;
-    const poseCanvas = idx===0 ? $('poseCanvas1') : $('poseCanvas2');
-    Array.from(vc.querySelectorAll('video')).forEach(v=>v.remove());
-    vc.appendChild(blk);
-    vc.appendChild(poseCanvas);
+  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+    },
+    runningMode: "VIDEO",
+    numPoses: 1
   });
 
-  initSegments(ds1);
-  initSegments(ds2);
-
-  const vakTrack1=(ds1.vakaros&&ds1.vakaros.track)||[];
-  const vakTrack2=(ds2.vakaros&&ds2.vakaros.track)||[];
-  const vakEpochs1=vakTrack1.map(p=>p.ts);
-  const vakEpochs2=vakTrack2.map(p=>p.ts);
-
-  const allGps1=allGps(ds1);
-  const allGps2=allGps(ds2);
-
-  const allEp=[...allGps1.map(p=>p.ts),...allGps2.map(p=>p.ts),...vakEpochs1,...vakEpochs2].filter(Number.isFinite);
-  if(!allEp.length){
-    log("No GPS data available. Analyze MP4 telemetry first.", "error");
-    $('analyzeStat').textContent="no gps";
-    return;
-  }
-  epochMin=Math.min(...allEp);
-  epochMax=Math.max(...allEp);
-  totalDur=epochMax-epochMin;
-  masterEpoch=epochMin;
-
-  $('nc1').textContent=ds1.segments.length;
-  $('nk1').textContent=vakTrack1.length;
-  $('nc2').textContent=ds2.segments.length;
-  $('nk2').textContent=vakTrack2.length;
-
-  scrub.max=totalDur.toFixed(1);
-  scrub.value="0";
-  tDisp.textContent='0:00 / '+fmtElapsed(totalDur);
-
-  function createVidEls(ds, container, blk){
-    ds.segments.forEach(seg=>{
-      const v=document.createElement('video');
-      v.setAttribute('playsinline','');
-      v.preload='auto';
-      container.insertBefore(v, blk);
-      seg.el=v;
-
-      v.addEventListener('seeked', ()=>{
-        if(seg.pSeek>0){ seg.pSeek--; return; }
-        if(v.readyState>=1){
-          masterEpoch = vTimeToEpoch(seg.epochs, seg.vTimes, v.currentTime);
-          masterEpoch = clamp(masterEpoch, epochMin, epochMax);
-          syncUI();
-        }
-      });
-    });
-  }
-  createVidEls(ds1, vc1, blk1);
-  createVidEls(ds2, vc2, blk2);
-
-  map = L.map('map', {zoomControl:true});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
-  }).addTo(map);
-
-  let vakLine1=null, mp4Line1=null, vakLine2=null, mp4Line2=null;
-  vakLine1 = vakTrack1.length ? L.polyline(vakTrack1.map(p=>[p.lat,p.lon]),{color:'#e53935',weight:3,opacity:0.85}).addTo(map) : null;
-  mp4Line1 = allGps1.length  ? L.polyline(allGps1.map(p=>[p.lat,p.lon]),{color:'#ef9a9a',weight:3,opacity:0.55,dashArray:'6 4'}).addTo(map) : null;
-  vakLine2 = vakTrack2.length ? L.polyline(vakTrack2.map(p=>[p.lat,p.lon]),{color:'#1e88e5',weight:3,opacity:0.85}).addTo(map) : null;
-  mp4Line2 = allGps2.length  ? L.polyline(allGps2.map(p=>[p.lat,p.lon]),{color:'#90caf9',weight:3,opacity:0.55,dashArray:'6 4'}).addTo(map) : null;
-
-  if(mp4Line1) mp4Line1.on('click', e=>onTrackClick(allGps1,e));
-  if(vakLine1) vakLine1.on('click', e=>onTrackClick(vakTrack1,e));
-  if(mp4Line2) mp4Line2.on('click', e=>onTrackClick(allGps2,e));
-  if(vakLine2) vakLine2.on('click', e=>onTrackClick(vakTrack2,e));
-
-  const bounds=[];
-  [vakTrack1,allGps1,vakTrack2,allGps2].forEach(tr=>tr.forEach(p=>bounds.push([p.lat,p.lon])));
-  if(bounds.length) map.fitBounds(bounds,{padding:[20,20]});
-  else map.setView([63.4305,10.3951], 12);
-
-  mp4Dot1 = allGps1.length ? L.circleMarker([allGps1[0].lat,allGps1[0].lon],{radius:6,color:'#ef9a9a',fillColor:'#ef9a9a',fillOpacity:0.9}).addTo(map) : null;
-  mp4Dot2 = allGps2.length ? L.circleMarker([allGps2[0].lat,allGps2[0].lon],{radius:6,color:'#90caf9',fillColor:'#90caf9',fillOpacity:0.9}).addTo(map) : null;
-  vakArrow1 = vakTrack1.length ? L.marker([vakTrack1[0].lat,vakTrack1[0].lon],{icon:arrowIcon('#e53935')}).addTo(map) : null;
-  vakArrow2 = vakTrack2.length ? L.marker([vakTrack2[0].lat,vakTrack2[0].lon],{icon:arrowIcon('#1e88e5')}).addTo(map) : null;
-
-  // simple (no fade layers here to keep this "fix" tight)
-  goProGpsHidden = $('hideGoPro').checked;
-  if(goProGpsHidden){
-    if(mp4Line1) map.removeLayer(mp4Line1);
-    if(mp4Line2) map.removeLayer(mp4Line2);
-    if(mp4Dot1) mp4Dot1.setStyle({opacity:0,fillOpacity:0});
-    if(mp4Dot2) mp4Dot2.setStyle({opacity:0,fillOpacity:0});
-  }
-
-  syncUI();
-  updatePlaybackFileStatus();
-  log("Viewer rebuilt.");
+  const ms = Math.round(performance.now() - t0);
+  log(`model loaded in ${ms} ms`);
+  setStatus("ready");
 }
 
-/* =========================
-   Playback + sync
-========================= */
-function playAll(){ playing=true; lastTs=null; ppBtn.innerHTML='&#9646;&#9646; Pause'; }
-function pauseAll(){
-  playing=false; lastTs=null; ppBtn.innerHTML='&#9654; Play';
-  [ds1,ds2].forEach(ds=>ds.segments.forEach(s=>{ if(s.el && !s.el.paused) s.el.pause(); }));
-}
-ppBtn.addEventListener('click', ()=>{ playing?pauseAll():playAll(); });
-$('bk10').addEventListener('click', ()=>{ if(playing) pauseAll(); masterEpoch=Math.max(epochMin, masterEpoch-10); syncUI(); });
-$('fw10').addEventListener('click', ()=>{ if(playing) pauseAll(); masterEpoch=Math.min(epochMax, masterEpoch+10); syncUI(); });
-
-scrub.addEventListener('input', ()=>{
-  scrubbing=true;
-  if(playing) pauseAll();
-  masterEpoch = epochMin + parseFloat(scrub.value||'0');
-  syncUI();
-});
-scrub.addEventListener('change', ()=>{ scrubbing=false; });
-
-function findActiveSeg(ds){
-  for(let i=0;i<ds.segments.length;i++){
-    const s=ds.segments[i];
-    if(masterEpoch>=s.epochMin && masterEpoch<=s.epochMax) return i;
-  }
-  return -1;
-}
-function syncDataset(ds, blkEl){
-  const ai=findActiveSeg(ds);
-  ds.segments.forEach((seg,i)=>{
-    if(i===ai){
-      seg.el.style.display='block';
-      if(seg.loaded && seg.el.readyState>=1){
-        const target=epochToVTime(seg.epochs, seg.vTimes, masterEpoch);
-        const drift=Math.abs(seg.el.currentTime-target);
-        if(playing){
-          if(seg.el.paused) seg.el.play().catch(()=>{});
-          if(drift>0.5){ seg.pSeek++; seg.el.currentTime=target; }
-        } else {
-          if(!seg.el.paused) seg.el.pause();
-          if(drift>0.05){ seg.pSeek++; seg.el.currentTime=target; }
-        }
-      }
-    } else {
-      seg.el.style.display='none';
-      if(seg.el && !seg.el.paused) seg.el.pause();
-    }
-  });
-  blkEl.style.display = (ai>=0) ? 'none' : 'flex';
-  return ai;
-}
-function interpDsGps(allGpsArr, ep){
-  if(!allGpsArr.length) return null;
-  const epochs=allGpsArr.map(p=>p.ts);
-  return interpPos(allGpsArr, epochs, ep);
-}
-function syncUI(){
-  if(!epochMax || epochMax<=epochMin) return;
-
-  if(!scrubbing) scrub.value = (masterEpoch-epochMin).toFixed(1);
-  tDisp.textContent = fmtElapsed(masterEpoch-epochMin) + ' / ' + fmtElapsed(totalDur);
-
-  const a1 = syncDataset(ds1, blk1);
-  const a2 = syncDataset(ds2, blk2);
-
-  const allGps1=allGps(ds1);
-  const allGps2=allGps(ds2);
-
-  updateDot(mp4Dot1, allGps1, masterEpoch);
-  updateDot(mp4Dot2, allGps2, masterEpoch);
-
-  oUTC.textContent = fmtEpochUTC(masterEpoch);
-
-  if(a1>=0){
-    const seg=ds1.segments[a1];
-    o1clip.textContent = seg.name+' @ '+epochToVTime(seg.epochs,seg.vTimes,masterEpoch).toFixed(1)+'s';
-    o1gps.textContent = fmtLL(interpDsGps(allGps1, masterEpoch));
-  } else { o1clip.textContent='-'; o1gps.textContent='-'; }
-  o1vak.textContent = '-';
-
-  if(a2>=0){
-    const seg=ds2.segments[a2];
-    o2clip.textContent = seg.name+' @ '+epochToVTime(seg.epochs,seg.vTimes,masterEpoch).toFixed(1)+'s';
-    o2gps.textContent = fmtLL(interpDsGps(allGps2, masterEpoch));
-  } else { o2clip.textContent='-'; o2gps.textContent='-'; }
-  o2vak.textContent='-';
-}
-function tick(ts){
-  if(playing){
-    if(lastTs!==null){
-      masterEpoch += (ts-lastTs)/1000;
-      if(masterEpoch>=epochMax){ masterEpoch=epochMax; pauseAll(); }
-    }
-    lastTs=ts;
-  }
-  syncUI();
-  requestAnimationFrame(tick);
-}
-requestAnimationFrame(tick);
-
-/* =========================
-   Playback MP4 attachment by filename
-========================= */
-function updatePlaybackFileStatus(){
-  const parts=[];
-  function add(ds, color, label){
-    ds.segments.forEach(seg=>{
-      const ok=seg.loaded;
-      parts.push(`<span class="${ok?'ok':'bad'}">${ok?'✓':'✗'} ${seg.name} <span style="color:${color}">(${label})</span></span>`);
-    });
-  }
-  add(ds1,'#ef5350','Red');
-  add(ds2,'#42a5f5','Blue');
-  $('fsAll').innerHTML = parts.join(' &nbsp; ');
-}
-$('vfAll').addEventListener('change', (ev)=>{
-  const files=Array.from(ev.target.files||[]);
-  const mapByName={};
-  files.forEach(f=>mapByName[f.name.toLowerCase()]=f);
-
-  [ds1,ds2].forEach(ds=>{
-    ds.segments.forEach(seg=>{
-      const f=mapByName[seg.name.toLowerCase()];
-      if(f && seg.el){
-        seg.el.src = URL.createObjectURL(f);
-        seg.el.load();
-        seg.loaded=true;
-      }
-    });
-  });
-  updatePlaybackFileStatus();
-});
-$('hideGoPro').addEventListener('change', ()=>{ log("Hide GoPro toggled (rebuild to reapply fully)."); });
-
-/* =========================
-   Assignment table
-========================= */
-let analyzedFiles = []; // {file,name,gps,epochMin,epochMax,assign}
-function guessAssign(name){
-  const n=name.toLowerCase();
-  if(n.includes("red") || n.includes("cam1") || n.includes("athlete1") || n.includes("gopro1")) return "red";
-  if(n.includes("blue")|| n.includes("cam2") || n.includes("athlete2") || n.includes("gopro2")) return "blue";
-  const m=n.match(/gx0?([12])/);
-  if(m) return (m[1]==="1" ? "red" : "blue");
-  return "red";
-}
-function renderFileTable(){
-  const tb=$('fileTable');
-  tb.innerHTML="";
-  analyzedFiles.forEach((it, idx)=>{
-    const dtStart = isFinite(it.epochMin) ? fmtEpochUTC(it.epochMin) : "-";
-    const dtEnd   = isFinite(it.epochMax) ? fmtEpochUTC(it.epochMax) : "-";
-    const statusClass = it.gps.length ? "ok" : "bad";
-    const statusText = it.gps.length ? "ok" : "no gps";
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td class="mono">${it.name}</td>
-      <td>
-        <select data-idx="${idx}">
-          <option value="red" ${it.assign==="red"?"selected":""}>Red</option>
-          <option value="blue" ${it.assign==="blue"?"selected":""}>Blue</option>
-        </select>
-      </td>
-      <td class="mono">${it.gps.length}</td>
-      <td class="mono">${dtStart}</td>
-      <td class="mono">${dtEnd}</td>
-      <td class="mono ${statusClass}">${statusText}</td>
-    `;
-    tb.appendChild(tr);
-  });
-  tb.querySelectorAll('select').forEach(sel=>{
-    sel.addEventListener('change', (e)=>{
-      const idx=parseInt(e.target.getAttribute('data-idx'),10);
-      analyzedFiles[idx].assign = e.target.value;
-    });
-  });
-}
-
-/* =========================
-   Telemetry loader (FIXED)
-   Use esm.sh ?bundle to eliminate require() in browser. :contentReference[oaicite:1]{index=1}
-========================= */
-let __telemetryLibsPromise = null;
-async function loadTelemetryLibs(){
-  if(__telemetryLibsPromise) return __telemetryLibsPromise;
-
-  __telemetryLibsPromise = (async ()=>{
-    // 1) esm.sh bundled build (recommended)
-    try{
-      const gpmf = await import("https://esm.sh/gpmf-extract@0.1.9?bundle&target=es2020");
-      const gopro = await import("https://esm.sh/gopro-telemetry@1.2.9?bundle&target=es2020");
-      return {
-        gpmfExtract: gpmf.default ?? gpmf,
-        goproTelemetry: gopro.default ?? gopro
-      };
-    }catch(e1){
-      console.warn("esm.sh import failed; trying Skypack fallback", e1);
-    }
-
-    // 2) Skypack fallback
-    const gpmf = await import("https://cdn.skypack.dev/gpmf-extract");
-    const gopro = await import("https://cdn.skypack.dev/gopro-telemetry");
-    return {
-      gpmfExtract: gpmf.default ?? gpmf,
-      goproTelemetry: gopro.default ?? gopro
+function waitEvent(target, eventName){
+  return new Promise(resolve => {
+    const handler = () => {
+      target.removeEventListener(eventName, handler);
+      resolve();
     };
-  })();
-
-  return __telemetryLibsPromise;
+    target.addEventListener(eventName, handler, { once:true });
+  });
 }
 
-async function extractGpsFromMp4(file, onProgress){
-  const { gpmfExtract, goproTelemetry } = await loadTelemetryLibs();
+function setupCanvasForVideo(video){
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  log(`canvas set to ${canvas.width}x${canvas.height}`);
+}
 
-  const extracted = await gpmfExtract(file, {
-    browserMode: true,
-    useWorker: false,
-    progress: (p)=>{ if(onProgress) onProgress(p); }
-  });
+function drawSkeleton(landmarks, alpha){
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = `rgba(37,99,235,${alpha})`;
+  ctx.fillStyle   = `rgba(17,24,39,${Math.min(1, alpha + 0.15)})`;
 
-  const telemetry = await goproTelemetry(extracted, {
-    stream: ["GPS"],
-    // groupTimes: 200, // optional: reduces output size
-  });
+  const connections = [
+    [11,13],[13,15],
+    [12,14],[14,16],
+    [11,12],
+    [23,24],
+    [11,23],[12,24],
+    [23,25],[25,27],
+    [24,26],[26,28]
+  ];
 
-  // Normalize → points {ts,lat,lon,t,sog?}
-  const points=[];
-  const devices = telemetry && typeof telemetry==="object" ? telemetry : {};
-  for(const devKey of Object.keys(devices)){
-    const dev=devices[devKey];
-    if(!dev || typeof dev!=="object") continue;
+  for (const [a,b] of connections){
+    const A = landmarks[a], B = landmarks[b];
+    if (!A || !B) continue;
+    const x1 = A.x * canvas.width,  y1 = A.y * canvas.height;
+    const x2 = B.x * canvas.width,  y2 = B.y * canvas.height;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.stroke();
+  }
 
-    for(const streamKey of Object.keys(dev)){
-      const stream=dev[streamKey];
-      const samples = stream?.samples || stream?.values || stream;
-      if(!Array.isArray(samples)) continue;
+  const keypoints = [0,11,12,13,14,15,16,23,24,25,26,27,28];
+  for (const i of keypoints){
+    const p = landmarks[i];
+    if (!p) continue;
+    const x = p.x * canvas.width, y = p.y * canvas.height;
+    ctx.beginPath();
+    ctx.arc(x, y, 2.2, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
 
-      for(const s of samples){
-        const dateStr = s.date || s.time || s.datetime;
-        const ctsMs = (s.cts ?? s.t ?? s.timeMs ?? null);
+/**
+ * Real-time sampling while playing (evenly distributed in time).
+ * Turbo = raise playbackRate so it runs faster than 1×.
+ */
+async function processForward(video, sampleFps, turbo, maxRate){
+  const step = 1 / Math.max(1, sampleFps);
+  const duration = video.duration;
 
-        const lat = s.lat ?? s.latitude ?? (Array.isArray(s.value) ? s.value[0] : null);
-        const lon = s.lon ?? s.longitude ?? (Array.isArray(s.value) ? s.value[1] : null);
-        if(!isFinite(lat) || !isFinite(lon)) continue;
+  const hasRVFC = typeof video.requestVideoFrameCallback === "function";
+  log(`requestVideoFrameCallback: ${hasRVFC ? "yes" : "no"}`);
+  if (!hasRVFC){
+    throw new Error("This browser lacks requestVideoFrameCallback; iPad Safari should have it. Try updating iPadOS/Safari.");
+  }
 
-        let ts=null;
-        if(typeof dateStr === "string"){
-          const ms=Date.parse(dateStr);
-          if(Number.isFinite(ms)) ts=ms/1000;
+  // Reset and configure speed
+  video.pause();
+  video.currentTime = 0;
+  await waitEvent(video, "seeked");
+
+  const targetRate = turbo ? Math.min(Math.max(1, maxRate), 16) : 1;
+  video.playbackRate = targetRate;
+
+  let nextSampleTime = 0;
+  let samplesTried = 0;
+  let posesDrawn = 0;
+
+  const wallT0 = performance.now();
+
+  await video.play();
+
+  await new Promise((resolve, reject) => {
+    video.addEventListener("ended", () => resolve(), { once:true });
+
+    const tick = async (_now, metadata) => {
+      try{
+        const t = metadata.mediaTime; // seconds, precise for current frame
+
+        // sample at fixed step times based on mediaTime (even distribution)
+        if (t + 1e-6 >= nextSampleTime && t <= duration + 1e-3){
+          samplesTried++;
+          // advance in a way that catches up if playback jumps (turbo)
+          const stepsToAdvance = Math.max(1, Math.floor((t - nextSampleTime) / step) + 1);
+          nextSampleTime += stepsToAdvance * step;
+
+          const tsMs = Math.round(t * 1000);
+          const result = poseLandmarker.detectForVideo(video, tsMs);
+          if (result?.landmarks?.length){
+            posesDrawn++;
+            drawSkeleton(result.landmarks[0], 0.18);
+          }
+
+          const elapsed = (performance.now() - wallT0) / 1000;
+          const speed = elapsed > 0 ? (t / elapsed) : 0;
+          progressEl.textContent =
+            `time ${t.toFixed(2)}s / ${duration.toFixed(1)}s · samples ${samplesTried} · poses ${posesDrawn} · ~${speed.toFixed(2)}× (rate=${video.playbackRate}×)`;
         }
-        if(!isFinite(ts)) continue;
 
-        let t=null;
-        if(ctsMs!=null && isFinite(ctsMs)) t = ctsMs/1000;
-
-        const sog = isFinite(s.speed) ? s.speed : (isFinite(s.sog) ? s.sog : null);
-        points.push({ ts, lat, lon, t, sog });
+        if (!video.paused && !video.ended){
+          video.requestVideoFrameCallback(tick);
+        }
+      }catch(err){
+        reject(err);
       }
-    }
-  }
+    };
 
-  points.sort((a,b)=>a.ts-b.ts);
+    video.requestVideoFrameCallback(tick);
+  });
 
-  // Ensure clip-time t exists and starts at 0
-  if(points.length){
-    const ts0 = points[0].ts;
-    let t0 = points[0].t;
-    if(!isFinite(t0)) t0 = 0;
+  video.pause();
 
-    for(const p of points){
-      if(!isFinite(p.t)){
-        p.t = p.ts - ts0;
-      } else {
-        p.t = p.t - t0;
-      }
-    }
-  }
-  return points;
+  const wallElapsed = (performance.now() - wallT0) / 1000;
+  const avgSpeed = wallElapsed > 0 ? (duration / wallElapsed) : 0;
+
+  log(`forward done. turbo=${turbo}, rate=${targetRate}×, samples=${samplesTried}, poses=${posesDrawn}, wall=${wallElapsed.toFixed(2)}s, avg~${avgSpeed.toFixed(2)}×`);
+  progressEl.textContent =
+    `done · samples ${samplesTried} · poses ${posesDrawn} · wall ${wallElapsed.toFixed(1)}s · avg ~${avgSpeed.toFixed(2)}×`;
+
+  return { samplesTried, posesDrawn, avgSpeed };
 }
 
-/* =========================
-   Analyze MP4 telemetry
-========================= */
-$('analyzeBtn').addEventListener('click', async ()=>{
-  const files=Array.from($('mp4Input').files||[]);
-  if(!files.length){
-    $('analyzeStat').textContent="no files";
-    log("No MP4 files selected.", "error");
-    return;
-  }
+async function processVideoFile(file, sampleFps, turbo, maxRate){
+  if (!poseLandmarker) throw new Error("PoseLandmarker not initialized");
 
-  $('analyzeBtn').disabled=true;
-  $('analyzeStat').textContent="loading libs…";
-  $('fileTable').innerHTML="";
-  analyzedFiles=[];
-  log(`Starting telemetry analysis for ${files.length} MP4 file(s)…`);
+  setStatus("preparing video...");
+  progressEl.textContent = "";
+
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.src = url;
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+
+  await waitEvent(video, "loadedmetadata");
+  log(`video: ${video.videoWidth}x${video.videoHeight}, duration=${video.duration.toFixed(2)}s`);
+
+  setupCanvasForVideo(video);
+
+  setStatus(turbo ? "processing (turbo forward)..." : "processing (forward)...");
+  processBtn.disabled = true;
 
   try{
-    await loadTelemetryLibs();
-    for(let i=0;i<files.length;i++){
-      const f=files[i];
-      $('analyzeStat').textContent=`${i+1}/${files.length} ${f.name}`;
-      log(`Extracting GPS from ${f.name}…`);
-
-      const gps = await extractGpsFromMp4(f, (p)=>{
-        $('analyzeStat').textContent=`${i+1}/${files.length} ${f.name} · ${Math.round(p)}%`;
-      });
-
-      const epochMin = gps.length ? gps[0].ts : NaN;
-      const epochMax = gps.length ? gps[gps.length-1].ts : NaN;
-
-      analyzedFiles.push({
-        file:f, name:f.name, gps,
-        epochMin, epochMax,
-        assign: guessAssign(f.name)
-      });
-
-      log(`→ ${f.name}: ${gps.length} pts`);
+    const out = await processForward(video, sampleFps, turbo, maxRate);
+    setStatus("done");
+    if (out.posesDrawn === 0){
+      log("No poses were drawn. Try increasing Sample FPS, getting a closer full-body view, or using a clearer clip.", "error");
     }
+  } finally {
+    try { video.pause(); } catch {}
+    URL.revokeObjectURL(url);
+    processBtn.disabled = false;
+  }
+}
 
-    renderFileTable();
-    $('analyzeStat').textContent="done (review assignment)";
-    log("Telemetry analysis completed. Review assignment and click Rebuild.");
+processBtn.onclick = async () => {
+  try{
+    const file = videoInput.files?.[0];
+    if (!file){
+      log("no file selected", "error");
+      return;
+    }
+    const fps = parseInt(document.getElementById("fps").value || "5", 10);
+    const turbo = !!turboChk.checked;
+    const maxRate = parseInt(document.getElementById("maxRate").value || "8", 10);
+
+    log(`starting: ${file.name} (${Math.round(file.size/1024/1024)} MB), fps=${fps}, turbo=${turbo}, maxRate=${maxRate}×`);
+    await processVideoFile(file, fps, turbo, maxRate);
   }catch(e){
-    $('analyzeStat').textContent="error";
-    log(`ERROR: ${e?.message || e}`, "error");
-    console.error(e);
-  }finally{
-    $('analyzeBtn').disabled=false;
+    setStatus("error");
+    log(e?.stack || (e?.message || String(e)), "error");
   }
+};
+
+log(`app ${VERSION} boot`);
+initPose().catch(e => {
+  setStatus("error");
+  log("model init failed: " + (e?.message || e), "error");
 });
 
-$('rebuildBtn').addEventListener('click', ()=>{
-  if(!analyzedFiles.length){
-    log("Nothing to rebuild. Analyze MP4 telemetry first.", "error");
-    return;
-  }
+/* ---------- Minimal PWA setup (single-file) ---------- */
+const manifest = {
+  name: "Pose Overlay",
+  short_name: "Pose",
+  start_url: ".",
+  display: "standalone",
+  background_color: "#ffffff",
+  theme_color: "#ffffff"
+};
+const manifestBlob = new Blob([JSON.stringify(manifest)], { type:"application/json" });
+const manifestURL = URL.createObjectURL(manifestBlob);
+const m = document.createElement("link");
+m.rel = "manifest";
+m.href = manifestURL;
+document.head.appendChild(m);
 
-  const redSegs=[], blueSegs=[];
-  for(const it of analyzedFiles){
-    if(!it.gps.length) continue;
-    const seg={ name: it.name, gps: it.gps, epochMin: it.epochMin, epochMax: it.epochMax };
-    if(it.assign==="blue") blueSegs.push(seg);
-    else redSegs.push(seg);
-  }
-  redSegs.sort((a,b)=>a.epochMin-b.epochMin);
-  blueSegs.sort((a,b)=>a.epochMin-b.epochMin);
-
-  ds1 = { segments: redSegs,  vakaros: ds1.vakaros || {track:[]} };
-  ds2 = { segments: blueSegs, vakaros: ds2.vakaros || {track:[]} };
-
-  rebuildMapAndViewer();
-});
-
-/* =========================
-   Pose overlay (unchanged / optional)
-   (Kept minimal here. If you want the full pose overlay back exactly as before,
-    say so and I’ll paste the expanded pose module.)
-========================= */
-$('poseWarmup').addEventListener('click', ()=>log("Pose: not included in this minimal fix build."));
-$('poseEnable').addEventListener('change', ()=>log("Pose: not included in this minimal fix build."));
-
-/* =========================
-   Initial empty map
-========================= */
-(function initEmpty(){
-  map = L.map('map', {zoomControl:true});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
-  }).addTo(map);
-  map.setView([63.4305,10.3951], 12);
-  log("Ready. Select MP4s and run Analyze.");
-})();
+if ("serviceWorker" in navigator) {
+  const swCode = `
+    self.addEventListener("install", e => self.skipWaiting());
+    self.addEventListener("activate", e => self.clients.claim());
+    self.addEventListener("fetch", e => {});
+  `;
+  const swBlob = new Blob([swCode], { type:"text/javascript" });
+  const swURL = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swURL).catch(() => {});
+}
 </script>
 
 </body>
