@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Dual Athlete Multi-Video + Vakaros Viewer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <meta name="theme-color" content="#0b0f14"/>
+  <title>Dual Athlete Viewer (In-Browser Analysis + Pose)</title>
 
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -14,31 +16,30 @@
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
 
     .wrap{height:100%;display:grid;grid-template-columns:1fr 1fr;
-      grid-template-rows:1fr auto auto;gap:10px;padding:10px;}
+      grid-template-rows:1fr auto auto auto;gap:10px;padding:10px;}
 
     .panel{background:#111826;border:1px solid #223047;border-radius:10px;}
     .nopad{padding:0;overflow:hidden;}
-
     .left{display:flex;flex-direction:column;gap:6px;padding:10px;}
 
     .bottom-bar{grid-column:1/-1;background:#111826;border:1px solid #223047;
       border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;}
 
-    .file-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-    .file-row label{font-weight:bold;white-space:nowrap;}
-    .file-row input[type="file"]{min-width:0;}
+    .analysis-bar{grid-column:1/-1;background:#111826;border:1px solid #223047;
+      border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:8px;}
 
-    .fstat{font-size:11px;line-height:1.3;}
-    .fstat .ok{color:#66bb6a;} .fstat .miss{color:#ff7043;}
-
-    .red-label{color:#ef5350;} .blue-label{color:#42a5f5;}
+    .file-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .file-row label{font-weight:600;white-space:nowrap;}
+    input[type="file"]{max-width:100%;}
+    input[type="number"]{width:74px;}
 
     .ctrl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-    input[type="range"]{flex:1;min-width:80px;}
+    input[type="range"]{flex:1;min-width:120px;}
 
     button{background:#0b1220;color:#e6edf3;border:1px solid #223047;
       border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap;}
     button:hover{border-color:#35507a;}
+    button:disabled{opacity:.5;cursor:not-allowed;}
 
     .stats-row{display:flex;gap:12px;flex-wrap:wrap;}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
@@ -58,9 +59,6 @@
     #mapW{position:relative;width:100%;height:100%;}
     #map{width:100%;height:100%;}
 
-    .arrow-icon{background:none !important;border:none !important;}
-    .arrow-svg{transform-origin:center center;}
-
     .overlay{position:absolute;top:10px;right:10px;z-index:1000;
       background:rgba(10,16,26,0.88);border:1px solid rgba(80,120,170,0.35);
       border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.45;
@@ -72,17 +70,26 @@
     .sog-bar .sog-label{font-size:10px;opacity:0.6;}
     #sogCanvas{width:100%;height:54px;border-radius:4px;cursor:crosshair;display:block;}
 
-    /* ===== Pose overlay (MediaPipe) ===== */
+    /* Pose overlay */
     .pose-canvas{position:absolute;top:0;left:0;width:100%;height:100%;
       z-index:6;pointer-events:none;display:none;}
     .pose-on .pose-canvas{display:block;}
+
+    /* Analysis table */
+    table{border-collapse:collapse;width:100%;font-size:12px;}
+    th,td{border-bottom:1px solid #223047;padding:6px 8px;text-align:left;vertical-align:top;}
+    th{opacity:.8;font-weight:700;}
+    select{background:#0b1220;color:#e6edf3;border:1px solid #223047;border-radius:8px;padding:4px 6px;}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #223047;background:#0b1220;font-size:11px;}
+    .ok{color:#66bb6a;} .warn{color:#ffca28;} .bad{color:#ff7043;}
+    .log{max-height:160px;overflow:auto;white-space:pre-wrap;background:#0b1220;border:1px solid #223047;border-radius:10px;padding:10px;}
   </style>
 </head>
+
 <body>
   <div class="wrap">
-    <!-- ===== LEFT PANEL (VIDEOS + CONTROLS) ===== -->
+    <!-- LEFT -->
     <div class="left panel">
-      <!-- transport controls -->
       <div class="ctrl-row">
         <button id="bk10">-10 s</button>
         <button id="ppBtn">&#9654; Play</button>
@@ -96,22 +103,22 @@
         <span style="color:#ef9a9a;">Vak&#x2081;: <code id="nk1">0</code></span>
         <span style="color:#42a5f5;">Clips&#x2082;: <code id="nc2">0</code></span>
         <span style="color:#90caf9;">Vak&#x2082;: <code id="nk2">0</code></span>
+        <span class="pill mono" id="ver">v1.0.0</span>
       </div>
 
-      <!-- dual video panes -->
       <div class="vid-stack">
-        <div class="vid-box red-frame" id="vc1">
+        <div class="vid-box red-frame pose-on" id="vc1">
           <div class="blk" id="blk1"><span>No data at this time</span></div>
           <canvas class="pose-canvas" id="poseCanvas1"></canvas>
         </div>
-        <div class="vid-box blue-frame" id="vc2">
+        <div class="vid-box blue-frame pose-on" id="vc2">
           <div class="blk" id="blk2"><span>No data at this time</span></div>
           <canvas class="pose-canvas" id="poseCanvas2"></canvas>
         </div>
       </div>
     </div>
 
-    <!-- ===== RIGHT PANEL (MAP) ===== -->
+    <!-- RIGHT MAP -->
     <div class="panel nopad">
       <div id="mapW">
         <div id="map"></div>
@@ -129,17 +136,16 @@
           <div>Vakaros: <code id="o2vak">-</code></div>
           <hr>
           <div class="small" style="opacity:0.7;">
-            Solid lines = Vakaros tracks.<br>
-            Dashed lines = GoPro GPS tracks.
+            Solid = Vakaros track · Dashed = GoPro GPS
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ===== BOTTOM: SOG timeseries ===== -->
+    <!-- SOG -->
     <div class="sog-bar" id="sogBar" style="display:none;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <span class="sog-label mono" style="flex:1;">SOG (m/s) — <span style="color:#ef5350;">Red</span> / <span style="color:#42a5f5;">Blue</span>  — click or drag to scrub</span>
+        <span class="sog-label mono" style="flex:1;">SOG (m/s) — <span style="color:#ef5350;">Red</span> / <span style="color:#42a5f5;">Blue</span> — click/drag to scrub</span>
         <button id="sogZoomIn" title="Zoom in" style="padding:2px 8px;">+</button>
         <button id="sogZoomOut" title="Zoom out" style="padding:2px 8px;">&minus;</button>
         <button id="sogZoomReset" title="Reset zoom" style="padding:2px 8px;font-size:10px;">1:1</button>
@@ -147,218 +153,247 @@
       <canvas id="sogCanvas" height="54"></canvas>
     </div>
 
-    <!-- ===== BOTTOM: File imports ===== -->
+    <!-- ANALYSIS / BUILD DATASETS -->
+    <div class="analysis-bar">
+      <div class="file-row">
+        <label>MP4 files:</label>
+        <input id="mp4Input" type="file" accept="video/mp4" multiple>
+        <button id="analyzeBtn">Analyze MP4 telemetry</button>
+        <span class="mono small" id="analyzeStat" style="opacity:.8;">idle</span>
+      </div>
+
+      <div class="file-row">
+        <label>Vakaros CSV (optional):</label>
+        <input id="vakInput" type="file" accept=".csv,text/csv" multiple>
+        <button id="applyVakBtn">Apply CSV(s)</button>
+        <span class="mono small" id="vakStat" style="opacity:.8;">none</span>
+      </div>
+
+      <div class="small" style="opacity:.85">
+        1) Select MP4s → <b>Analyze</b> (runs locally on iPad).<br>
+        2) Check/adjust Red/Blue assignment table if needed → <b>Rebuild</b>.<br>
+        3) Import MP4s again in the bottom bar to load video bytes for playback (filenames must match).<br>
+      </div>
+
+      <div style="overflow:auto;border:1px solid #223047;border-radius:10px;">
+        <table>
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Assign</th>
+              <th>GPS pts</th>
+              <th>Epoch start</th>
+              <th>Epoch end</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="fileTable"></tbody>
+        </table>
+      </div>
+
+      <div class="log mono" id="log"></div>
+    </div>
+
+    <!-- BOTTOM CONTROLS -->
     <div class="bottom-bar">
       <div class="file-row">
-        <label>Import all videos:</label>
+        <label>Import all videos (playback):</label>
         <input id="vfAll" type="file" accept="video/mp4" multiple>
-        <label style="margin-left:18px;cursor:pointer;user-select:none;">
+
+        <label style="margin-left:10px;cursor:pointer;user-select:none;">
           <input type="checkbox" id="hideGoPro"> Hide GoPro GPS tracks
         </label>
-        <label style="margin-left:18px;cursor:pointer;user-select:none;">
+        <label style="margin-left:10px;cursor:pointer;user-select:none;">
           <input type="checkbox" id="fadeTracks"> Fade tracks (±60 s window)
         </label>
 
-        <label style="margin-left:18px;cursor:pointer;user-select:none;">
+        <label style="margin-left:14px;cursor:pointer;user-select:none;">
           <input type="checkbox" id="poseEnable"> Pose overlay
         </label>
-        <label style="margin-left:10px;cursor:pointer;user-select:none;">
+        <label style="margin-left:6px;cursor:pointer;user-select:none;">
           <input type="checkbox" id="poseRed" checked> Red
         </label>
         <label style="margin-left:6px;cursor:pointer;user-select:none;">
           <input type="checkbox" id="poseBlue" checked> Blue
         </label>
         <label style="margin-left:12px;white-space:nowrap;">
-          Pose FPS <input id="poseFps" type="number" min="1" max="30" value="5"
-            style="width:64px;margin-left:6px;background:#0b1220;color:#e6edf3;border:1px solid #223047;border-radius:8px;padding:4px 6px;">
+          Pose FPS <input id="poseFps" type="number" min="1" max="30" value="5">
         </label>
-        <label style="margin-left:12px;white-space:nowrap;" title="When Pose overlay is enabled, this sets the maximum playback rate the pose engine may request while playing. It won't break sync; it's a cap.">
-          Pose max× <input id="poseMaxRate" type="number" min="1" max="16" value="8"
-            style="width:64px;margin-left:6px;background:#0b1220;color:#e6edf3;border:1px solid #223047;border-radius:8px;padding:4px 6px;">
-        </label>
-        <button id="poseWarmup" title="Loads the MediaPipe model (first load can take a few seconds)."
-          style="margin-left:12px;padding:6px 10px;">Load Pose</button>
-        <button id="poseClear" title="Clears the current pose drawings."
-          style="padding:6px 10px;">Clear Pose</button>
+        <button id="poseWarmup" style="padding:6px 10px;">Load Pose</button>
+        <button id="poseClear" style="padding:6px 10px;">Clear Pose</button>
         <span class="mono small" id="poseStat" style="opacity:0.7;">Pose: off</span>
+
+        <button id="rebuildBtn" style="margin-left:auto;">Rebuild datasets from table</button>
       </div>
-      <div class="fstat mono" id="fsAll" style="flex-basis:100%;"></div>
+      <div class="mono small" id="fsAll" style="flex-basis:100%;opacity:.9;"></div>
     </div>
   </div>
 
 <script>
-// ======================== Embedded data ========================
-// NOTE: If you use the Python generator, it will replace these placeholders.
-// If you open standalone, replace these manually with your dataset JSON objects.
-const ds1 = __DS1_JSON__;   // {segments:[{name,gps,epochMin,epochMax},], vakaros:{track:[.]}}
-const ds2 = __DS2_JSON__;
-
-const vakTrack1 = (ds1.vakaros && ds1.vakaros.track) || [];
-const vakTrack2 = (ds2.vakaros && ds2.vakaros.track) || [];
-const vakEpochs1 = vakTrack1.map(p => p.ts);
-const vakEpochs2 = vakTrack2.map(p => p.ts);
-
-// Stats
-const singleMode = ds2.segments.length === 0;
-document.getElementById('nc1').textContent = ds1.segments.length;
-document.getElementById('nk1').textContent = vakTrack1.length;
-document.getElementById('nc2').textContent = ds2.segments.length;
-document.getElementById('nk2').textContent = vakTrack2.length;
-
-// Hide blue UI elements in single-athlete mode
-if (singleMode) {
-  document.getElementById('vc2').style.display = 'none';
-  // Grow red video box
-  document.getElementById('vc1').style.flex = '1';
-  // Hide blue stats
-  document.querySelectorAll('.stats-row span').forEach(el => {
-    if (el.style.color === 'rgb(66, 165, 245)' || el.style.color === 'rgb(144, 202, 249)')
-      el.style.display = 'none';
-  });
-  // Hide blue overlay section
-  const overlayHrs = document.querySelectorAll('.overlay hr');
-  const o2header = document.querySelector('.overlay div[style*="42a5f5"]');
-  if (o2header) {
-    // Hide from second <hr> onward (blue section)
-    let hide = false;
-    o2header.parentElement.childNodes.forEach(n => {
-      if (n === overlayHrs[1]) hide = true;
-      if (hide && n.style !== undefined) n.style.display = 'none';
-      if (hide && n.nodeType === 1) n.style.display = 'none';
-    });
-  }
-}
-
-// Pre-compute per-segment lookup arrays
-function initSegments(ds) {
-  ds.segments.forEach(seg => {
-    seg.epochs = seg.gps.map(p => p.ts);
-    seg.vTimes = seg.gps.map(p => p.t);
-    seg.el = null;          // <video> element (created below)
-    seg.loaded = false;
-    seg.pSeek = 0;          // programmatic seek counter
-  });
-}
-initSegments(ds1);
-initSegments(ds2);
-
-// Collect all GPS points per dataset for polylines
-function allGps(ds) {
-  const pts = [];
-  ds.segments.forEach(s => s.gps.forEach(p => pts.push(p)));
-  pts.sort((a,b) => a.ts - b.ts);
-  return pts;
-}
-const allGps1 = allGps(ds1);
-const allGps2 = allGps(ds2);
-
-// Global epoch range (union of all tracks)
-const allEp = [].concat(
-  allGps1.map(p=>p.ts), allGps2.map(p=>p.ts),
-  vakEpochs1, vakEpochs2
-);
-const epochMin = Math.min.apply(null, allEp);
-const epochMax = Math.max.apply(null, allEp);
-const totalDur = epochMax - epochMin;
-
-// ======================== Utilities ========================
-function lerp(a,b,t){ return a + (b-a)*t; }
+/* =========================
+   Small helpers + logger
+========================= */
+const $ = (id)=>document.getElementById(id);
 function clamp(x,a,b){ return Math.max(a, Math.min(b,x)); }
-
+function lerp(a,b,t){ return a + (b-a)*t; }
 function bisect(arr, x) {
   let lo=0, hi=arr.length;
   while (lo < hi) {
-    const mid = (lo+hi)>>1;
-    if (arr[mid] < x) lo = mid+1;
-    else hi = mid;
+    const mid=(lo+hi)>>1;
+    if (arr[mid] < x) lo=mid+1; else hi=mid;
   }
   return lo;
 }
+function fmtElapsed(s){ s=Math.max(0,s); const m=Math.floor(s/60); const ss=Math.floor(s%60).toString().padStart(2,'0'); return m+':'+ss; }
+function fmtEpochUTC(ep){ return new Date(ep*1000).toISOString().replace('T',' ').replace('.000Z','Z'); }
+function fmtLL(pos){ return pos ? pos.lat.toFixed(6)+', '+pos.lon.toFixed(6) : '-'; }
+function log(msg, kind="info"){
+  const t=new Date().toISOString().slice(11,19);
+  const line=`[${t}] ${msg}\n`;
+  const el=$('log');
+  el.textContent += line;
+  el.scrollTop = el.scrollHeight;
+  console[kind==="error"?"error":"log"](msg);
+}
+function emptyDS(){ return { segments:[], vakaros:{track:[]} }; }
 
-function interpPos(track, epochs, t) {
-  if (!epochs.length) return null;
-  if (t <= epochs[0]) return track[0];
-  if (t >= epochs[epochs.length-1]) return track[track.length-1];
-  const i = bisect(epochs, t);
-  const t0 = epochs[i-1], t1 = epochs[i];
-  const p0 = track[i-1], p1 = track[i];
-  const u = (t - t0) / (t1 - t0);
-  return {lat: lerp(p0.lat,p1.lat,u), lon: lerp(p0.lon,p1.lon,u), ts:t};
+/* =========================
+   Runtime datasets
+========================= */
+let ds1 = emptyDS(); // Red
+let ds2 = emptyDS(); // Blue
+
+/* Segment structure used by viewer:
+   seg = { name, gps:[{ts,lat,lon,t,sog?}], epochMin, epochMax, epochs:[ts..], vTimes:[t..], el, loaded, pSeek }
+*/
+function initSegments(ds){
+  ds.segments.forEach(seg=>{
+    seg.epochs = seg.gps.map(p=>p.ts);
+    seg.vTimes = seg.gps.map(p=>p.t);
+    seg.el = null;
+    seg.loaded = false;
+    seg.pSeek = 0;
+  });
+}
+function allGps(ds){
+  const pts=[];
+  ds.segments.forEach(s=>s.gps.forEach(p=>pts.push(p)));
+  pts.sort((a,b)=>a.ts-b.ts);
+  return pts;
+}
+function interpPos(track, epochs, t){
+  if(!epochs.length) return null;
+  if(t<=epochs[0]) return track[0];
+  if(t>=epochs[epochs.length-1]) return track[track.length-1];
+  const i=bisect(epochs,t);
+  const t0=epochs[i-1], t1=epochs[i];
+  const p0=track[i-1], p1=track[i];
+  const u=(t-t0)/(t1-t0);
+  return {lat:lerp(p0.lat,p1.lat,u), lon:lerp(p0.lon,p1.lon,u), ts:t};
+}
+function epochToVTime(epochs, vTimes, ep){
+  if(ep<=epochs[0]) return vTimes[0];
+  if(ep>=epochs[epochs.length-1]) return vTimes[vTimes.length-1];
+  const i=bisect(epochs,ep);
+  const e0=epochs[i-1], e1=epochs[i];
+  const v0=vTimes[i-1], v1=vTimes[i];
+  const u=(ep-e0)/(e1-e0);
+  return lerp(v0,v1,u);
+}
+function vTimeToEpoch(epochs, vTimes, vt){
+  if(vt<=vTimes[0]) return epochs[0];
+  if(vt>=vTimes[vTimes.length-1]) return epochs[epochs.length-1];
+  const i=bisect(vTimes,vt);
+  const v0=vTimes[i-1], v1=vTimes[i];
+  const e0=epochs[i-1], e1=epochs[i];
+  const u=(vt-v0)/(v1-v0);
+  return lerp(e0,e1,u);
 }
 
-function interpDsGps(allGps, t) {
-  if (!allGps.length) return null;
-  const epochs = allGps.map(p=>p.ts);
-  return interpPos(allGps, epochs, t);
+/* =========================
+   Viewer state + UI refs
+========================= */
+const vc1=$('vc1'), vc2=$('vc2'), blk1=$('blk1'), blk2=$('blk2');
+const ppBtn=$('ppBtn'), scrub=$('scrub'), tDisp=$('tDisp');
+const oUTC=$('oUTC'), o1clip=$('o1clip'), o1gps=$('o1gps'), o1vak=$('o1vak'), o2clip=$('o2clip'), o2gps=$('o2gps'), o2vak=$('o2vak');
+
+let epochMin=0, epochMax=0, totalDur=0;
+let masterEpoch=0;
+let playing=false;
+let lastTs=null;
+let scrubbing=false;
+
+/* Map + layers */
+let map=null;
+let vakLine1=null, mp4Line1=null, vakLine2=null, mp4Line2=null;
+let mp4Dot1=null, mp4Dot2=null, vakArrow1=null, vakArrow2=null;
+let goProGpsHidden=false;
+let fadeMode=false;
+
+/* Fade-track infrastructure (same behavior) */
+const FADE_WIN=60, FADE_OUTER=15, FADE_INNER=15;
+let greyVak1=null, greyMp41=null, greyVak2=null, greyMp42=null;
+let fadeVak1=null, fadeMp41=null, fadeVak2=null, fadeMp42=null;
+
+/* SOG chart */
+let sogInstalled=false;
+
+/* =========================
+   Map init + redraw from ds
+========================= */
+function arrowIcon(color){
+  return L.divIcon({
+    className:'arrow-icon',
+    html:`<svg class="arrow-svg" width="28" height="28" viewBox="0 0 28 28">
+      <path d="M14 2 L18 14 L14 12 L10 14 Z" fill="${color}" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
+      <circle cx="14" cy="14" r="1.5" fill="rgba(0,0,0,0.4)"/>
+    </svg>`,
+    iconSize:[28,28], iconAnchor:[14,14]
+  });
+}
+function updateArrow(marker, ep, track, epochs){
+  if(!marker || !track.length) return;
+  const p=interpPos(track,epochs,ep);
+  if(!p) return;
+  marker.setLatLng([p.lat,p.lon]);
+  const i=clamp(bisect(epochs,ep),1,track.length-1);
+  const a=track[i-1], b=track[i];
+  const dx=(b.lon-a.lon)*Math.cos((a.lat+b.lat)*Math.PI/360);
+  const dy=(b.lat-a.lat);
+  const ang=Math.atan2(dx,dy)*180/Math.PI;
+  const el=marker.getElement();
+  if(el){
+    const svg=el.querySelector('.arrow-svg');
+    if(svg) svg.style.transform=`rotate(${ang}deg)`;
+  }
+}
+function updateDot(dot, track, ep){
+  if(!dot || !track.length) return;
+  const epochs=track.map(p=>p.ts);
+  const p=interpPos(track,epochs,ep);
+  if(p) dot.setLatLng([p.lat,p.lon]);
+}
+function onTrackClick(track, e){
+  if(!track.length) return;
+  const latlng=e.latlng;
+  let best=0, bestD=Infinity;
+  for(let i=0;i<track.length;i++){
+    const dx=track[i].lon-latlng.lng;
+    const dy=track[i].lat-latlng.lat;
+    const d=dx*dx+dy*dy;
+    if(d<bestD){bestD=d;best=i;}
+  }
+  const ep=track[best].ts;
+  if(isFinite(ep)){
+    if(playing) pauseAll();
+    masterEpoch=clamp(ep, epochMin, epochMax);
+    syncUI();
+  }
 }
 
-function epochToVTime(epochs, vTimes, ep) {
-  if (ep <= epochs[0]) return vTimes[0];
-  if (ep >= epochs[epochs.length-1]) return vTimes[vTimes.length-1];
-  const i = bisect(epochs, ep);
-  const e0 = epochs[i-1], e1 = epochs[i];
-  const v0 = vTimes[i-1], v1 = vTimes[i];
-  const u = (ep - e0) / (e1 - e0);
-  return lerp(v0, v1, u);
-}
-
-function vTimeToEpoch(epochs, vTimes, vt) {
-  if (vt <= vTimes[0]) return epochs[0];
-  if (vt >= vTimes[vTimes.length-1]) return epochs[epochs.length-1];
-  const i = bisect(vTimes, vt);
-  const v0 = vTimes[i-1], v1 = vTimes[i];
-  const e0 = epochs[i-1], e1 = epochs[i];
-  const u = (vt - v0) / (v1 - v0);
-  return lerp(e0, e1, u);
-}
-
-function fmtElapsed(s) {
-  s = Math.max(0, s);
-  const m = Math.floor(s/60);
-  const ss = Math.floor(s%60).toString().padStart(2,'0');
-  return m + ':' + ss;
-}
-function fmtEpochUTC(ep) {
-  return new Date(ep*1000).toISOString().replace('T',' ').replace('.000Z','Z');
-}
-function fmtLL(pos) {
-  return pos ? pos.lat.toFixed(6)+', '+pos.lon.toFixed(6) : '-';
-}
-
-// ======================== Map ========================
-const map = L.map('map', {zoomControl:true});
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
-}).addTo(map);
-
-// Polylines: Vakaros = solid bright, GoPro = dashed lighter
-const vakLine1 = vakTrack1.length
-  ? L.polyline(vakTrack1.map(p=>[p.lat,p.lon]),{color:'#e53935',weight:3,opacity:0.85}).addTo(map) : null;
-const mp4Line1 = allGps1.length
-  ? L.polyline(allGps1.map(p=>[p.lat,p.lon]),{color:'#ef9a9a',weight:3,opacity:0.55,dashArray:'6 4'}).addTo(map) : null;
-const vakLine2 = vakTrack2.length
-  ? L.polyline(vakTrack2.map(p=>[p.lat,p.lon]),{color:'#1e88e5',weight:3,opacity:0.85}).addTo(map) : null;
-const mp4Line2 = allGps2.length
-  ? L.polyline(allGps2.map(p=>[p.lat,p.lon]),{color:'#90caf9',weight:3,opacity:0.55,dashArray:'6 4'}).addTo(map) : null;
-
-// ======================== Fade-track support ========================
-const greyVak1 = vakTrack1.length
-  ? L.polyline(vakTrack1.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25}).addTo(map) : null;
-const greyMp41 = allGps1.length
-  ? L.polyline(allGps1.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25,dashArray:'4 3'}).addTo(map) : null;
-const greyVak2 = vakTrack2.length
-  ? L.polyline(vakTrack2.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25}).addTo(map) : null;
-const greyMp42 = allGps2.length
-  ? L.polyline(allGps2.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25,dashArray:'4 3'}).addTo(map) : null;
-[greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{if(l) map.removeLayer(l);});
-
-const FADE_WIN = 60;
-const FADE_OUTER = 15;
-const FADE_INNER = 15;
-
-function makeFadeSet(color, weight, dashArr) {
-  const opts = {weight, interactive:false};
-  if (dashArr) opts.dashArray = dashArr;
+function makeFadeSet(color, weight, dashArr){
+  const opts={weight,interactive:false};
+  if(dashArr) opts.dashArray=dashArr;
   return {
     ultraFadeIn:  L.polyline([], {...opts, color, opacity:0.08}),
     fadeIn:       L.polyline([], {...opts, color, opacity:0.18}),
@@ -367,62 +402,18 @@ function makeFadeSet(color, weight, dashArr) {
     ultraFadeOut: L.polyline([], {...opts, color, opacity:0.08}),
   };
 }
-const fadeVak1 = makeFadeSet('#e53935', 4, null);
-const fadeMp41 = makeFadeSet('#ef9a9a', 4, '6 4');
-const fadeVak2 = makeFadeSet('#1e88e5', 4, null);
-const fadeMp42 = makeFadeSet('#90caf9', 4, '6 4');
-
-function addFadeSet(fs) {
-  map.addLayer(fs.ultraFadeIn);
-  map.addLayer(fs.fadeIn);
-  map.addLayer(fs.solid);
-  map.addLayer(fs.fadeOut);
-  map.addLayer(fs.ultraFadeOut);
+function addFadeSet(fs){ map.addLayer(fs.ultraFadeIn); map.addLayer(fs.fadeIn); map.addLayer(fs.solid); map.addLayer(fs.fadeOut); map.addLayer(fs.ultraFadeOut); }
+function removeFadeSet(fs){ map.removeLayer(fs.ultraFadeIn); map.removeLayer(fs.fadeIn); map.removeLayer(fs.solid); map.removeLayer(fs.fadeOut); map.removeLayer(fs.ultraFadeOut); }
+function setLinePoints(line, pts){ line.setLatLngs(pts.map(p=>[p.lat,p.lon])); }
+function sliceByEpoch(track, epochs, lo, hi){
+  if(!track.length) return [];
+  const i0=bisect(epochs,lo);
+  const i1=bisect(epochs,hi);
+  return track.slice(Math.max(0,i0-1), Math.min(track.length,i1+1));
 }
-function removeFadeSet(fs) {
-  map.removeLayer(fs.ultraFadeIn);
-  map.removeLayer(fs.fadeIn);
-  map.removeLayer(fs.solid);
-  map.removeLayer(fs.fadeOut);
-  map.removeLayer(fs.ultraFadeOut);
-}
-function setLinePoints(line, pts) {
-  line.setLatLngs(pts.map(p=>[p.lat,p.lon]));
-}
-function sliceByEpoch(track, epochs, lo, hi) {
-  if (!track.length) return [];
-  const i0 = bisect(epochs, lo);
-  const i1 = bisect(epochs, hi);
-  return track.slice(Math.max(0,i0-1), Math.min(track.length, i1+1));
-}
-
-let fadeMode = false;
-function enableFade(){
-  [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.addLayer(l); });
-  if (vakLine1) map.removeLayer(vakLine1);
-  if (mp4Line1) map.removeLayer(mp4Line1);
-  if (vakLine2) map.removeLayer(vakLine2);
-  if (mp4Line2) map.removeLayer(mp4Line2);
-  addFadeSet(fadeVak1); addFadeSet(fadeMp41);
-  addFadeSet(fadeVak2); addFadeSet(fadeMp42);
-}
-function disableFade(){
-  [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.removeLayer(l); });
-  removeFadeSet(fadeVak1); removeFadeSet(fadeMp41);
-  removeFadeSet(fadeVak2); removeFadeSet(fadeMp42);
-  if (vakLine1) map.addLayer(vakLine1);
-  if (mp4Line1) map.addLayer(mp4Line1);
-  if (vakLine2) map.addLayer(vakLine2);
-  if (mp4Line2) map.addLayer(mp4Line2);
-}
-const allGps1Epochs = allGps1.map(p=>p.ts);
-const allGps2Epochs = allGps2.map(p=>p.ts);
-function updateFadeTracks(ep){
-  const lo = ep - (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
-  const hi = ep + (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
-
+function updateFadeTracks(ep, vakTrack1, vakEpochs1, allGps1, allGps1Epochs, vakTrack2, vakEpochs2, allGps2, allGps2Epochs){
   function upd(fs, track, epochs){
-    if (!track.length) return;
+    if(!track.length) return;
     const ultraInLo  = ep - (FADE_WIN/2 + FADE_INNER + FADE_OUTER);
     const ultraInHi  = ep - (FADE_WIN/2 + FADE_INNER);
     const fadeInLo   = ultraInHi;
@@ -440,742 +431,1006 @@ function updateFadeTracks(ep){
     setLinePoints(fs.fadeOut,      sliceByEpoch(track, epochs, fadeOutLo, fadeOutHi));
     setLinePoints(fs.ultraFadeOut, sliceByEpoch(track, epochs, ultraOutLo, ultraOutHi));
   }
-
   upd(fadeVak1, vakTrack1, vakEpochs1);
   upd(fadeMp41, allGps1,   allGps1Epochs);
   upd(fadeVak2, vakTrack2, vakEpochs2);
   upd(fadeMp42, allGps2,   allGps2Epochs);
 }
 
-// Fit map view
-const bounds = [];
-[vakTrack1, allGps1, vakTrack2, allGps2].forEach(tr => tr.forEach(p=>bounds.push([p.lat,p.lon])));
-if (bounds.length) map.fitBounds(bounds, {padding:[20,20]});
+function rebuildMapAndViewer(){
+  // Stop playback & remove existing video elements
+  pauseAll();
 
-// Markers
-const mp4Dot1 = allGps1.length ? L.circleMarker([allGps1[0].lat,allGps1[0].lon],{radius:6,color:'#ef9a9a',fillColor:'#ef9a9a',fillOpacity:0.9}).addTo(map) : null;
-const mp4Dot2 = allGps2.length ? L.circleMarker([allGps2[0].lat,allGps2[0].lon],{radius:6,color:'#90caf9',fillColor:'#90caf9',fillOpacity:0.9}).addTo(map) : null;
+  // Remove old map (if any)
+  if(map){
+    map.off();
+    map.remove();
+    map=null;
+  }
 
-function arrowIcon(color){
-  return L.divIcon({
-    className:'arrow-icon',
-    html:`<svg class="arrow-svg" width="28" height="28" viewBox="0 0 28 28">
-      <path d="M14 2 L18 14 L14 12 L10 14 Z" fill="${color}" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
-      <circle cx="14" cy="14" r="1.5" fill="rgba(0,0,0,0.4)"/>
-    </svg>`,
-    iconSize:[28,28], iconAnchor:[14,14]
+  // Clear video containers (remove <video> children)
+  [vc1, vc2].forEach((vc, idx)=>{
+    const blk = idx===0 ? blk1 : blk2;
+    const poseCanvas = idx===0 ? $('poseCanvas1') : $('poseCanvas2');
+    Array.from(vc.querySelectorAll('video')).forEach(v=>v.remove());
+    // keep blk + pose canvas
+    vc.appendChild(blk);
+    vc.appendChild(poseCanvas);
   });
-}
-const vakArrow1 = vakTrack1.length ? L.marker([vakTrack1[0].lat,vakTrack1[0].lon],{icon:arrowIcon('#e53935')}).addTo(map) : null;
-const vakArrow2 = vakTrack2.length ? L.marker([vakTrack2[0].lat,vakTrack2[0].lon],{icon:arrowIcon('#1e88e5')}).addTo(map) : null;
 
-function updateDot(dot, track, ep){
-  if (!dot || !track.length) return;
-  const epochs = track.map(p=>p.ts);
-  const p = interpPos(track, epochs, ep);
-  if (p) dot.setLatLng([p.lat,p.lon]);
-}
-function updateArrow(marker, _unused, ep, rotate, track, epochs){
-  if (!marker || !track.length) return;
-  const p = interpPos(track, epochs, ep);
-  if (!p) return;
-  marker.setLatLng([p.lat,p.lon]);
-  if (!rotate) return;
+  // Init segment fields
+  initSegments(ds1);
+  initSegments(ds2);
 
-  // Compute heading from neighbor points
-  const i = clamp(bisect(epochs, ep), 1, track.length-1);
-  const a = track[i-1], b = track[i];
-  const dx = (b.lon - a.lon) * Math.cos((a.lat+b.lat)*Math.PI/360);
-  const dy = (b.lat - a.lat);
-  const ang = Math.atan2(dx, dy) * 180/Math.PI; // degrees
-  const el = marker.getElement();
-  if (el) {
-    const svg = el.querySelector('.arrow-svg');
-    if (svg) svg.style.transform = `rotate(${ang}deg)`;
+  const vakTrack1 = (ds1.vakaros && ds1.vakaros.track) || [];
+  const vakTrack2 = (ds2.vakaros && ds2.vakaros.track) || [];
+  const vakEpochs1 = vakTrack1.map(p=>p.ts);
+  const vakEpochs2 = vakTrack2.map(p=>p.ts);
+
+  const allGps1 = allGps(ds1);
+  const allGps2 = allGps(ds2);
+
+  // Set epoch bounds
+  const allEp=[...allGps1.map(p=>p.ts),...allGps2.map(p=>p.ts),...vakEpochs1,...vakEpochs2].filter(Number.isFinite);
+  if(!allEp.length){
+    log("No GPS data available in ds1/ds2. Analyze MP4 telemetry first.", "warn");
+    $('analyzeStat').textContent="no gps";
+    return;
   }
-}
+  epochMin = Math.min(...allEp);
+  epochMax = Math.max(...allEp);
+  totalDur = epochMax - epochMin;
+  masterEpoch = epochMin;
 
-function onTrackClick(track, e){
-  if (!track.length) return;
-  const latlng = e.latlng;
-  // brute nearest (ok for thinned tracks)
-  let best = 0, bestD = Infinity;
-  for (let i=0;i<track.length;i++){
-    const dx = track[i].lon - latlng.lng;
-    const dy = track[i].lat - latlng.lat;
-    const d = dx*dx + dy*dy;
-    if (d < bestD) { bestD=d; best=i; }
-  }
-  const ep = track[best].ts;
-  if (isFinite(ep)) {
-    if (playing) pauseAll();
-    masterEpoch = clamp(ep, epochMin, epochMax);
-    syncUI();
-  }
-}
-if (mp4Line1) mp4Line1.on('click', e => onTrackClick(allGps1, e));
-if (vakLine1) vakLine1.on('click', e => onTrackClick(vakTrack1, e));
-if (mp4Line2) mp4Line2.on('click', e => onTrackClick(allGps2, e));
-if (vakLine2) vakLine2.on('click', e => onTrackClick(vakTrack2, e));
+  // Update stats
+  $('nc1').textContent = ds1.segments.length;
+  $('nk1').textContent = vakTrack1.length;
+  $('nc2').textContent = ds2.segments.length;
+  $('nk2').textContent = vakTrack2.length;
 
-// ======================== Create <video> elements ========================
-function createVidEls(ds, container, blk) {
-  ds.segments.forEach((seg, i) => {
-    const v = document.createElement('video');
-    v.setAttribute('playsinline','');
-    v.preload = 'auto';
-    container.insertBefore(v, blk);
-    seg.el = v;
+  // Setup scrub
+  scrub.max = totalDur.toFixed(1);
+  scrub.value = "0";
+  tDisp.textContent = '0:00 / ' + fmtElapsed(totalDur);
 
-    // User-initiated seek → update master clock
-    v.addEventListener('seeked', () => {
-      if (seg.pSeek > 0) { seg.pSeek--; return; }
-      if (v.readyState >= 1) {
-        masterEpoch = vTimeToEpoch(seg.epochs, seg.vTimes, v.currentTime);
-        masterEpoch = Math.max(epochMin, Math.min(epochMax, masterEpoch));
-        syncUI();
-      }
-    });
-  });
-}
+  // Create video elements for each segment
+  function createVidEls(ds, container, blk){
+    ds.segments.forEach(seg=>{
+      const v=document.createElement('video');
+      v.setAttribute('playsinline','');
+      v.preload='auto';
+      container.insertBefore(v, blk);
+      seg.el=v;
 
-const vc1 = document.getElementById('vc1');
-const vc2 = document.getElementById('vc2');
-const blk1 = document.getElementById('blk1');
-const blk2 = document.getElementById('blk2');
-createVidEls(ds1, vc1, blk1);
-createVidEls(ds2, vc2, blk2);
-
-// ======================== File input (unified) ========================
-function loadAllFiles(ev) {
-  const files = Array.from(ev.target.files || []);
-  const nameMap = {};
-  files.forEach(f => { nameMap[f.name.toLowerCase()] = f; });
-  [ds1, ds2].forEach(ds => {
-    ds.segments.forEach(seg => {
-      const key = seg.name.toLowerCase();
-      if (nameMap[key]) {
-        seg.el.src = URL.createObjectURL(nameMap[key]);
-        seg.el.load();
-        seg.loaded = true;
-      }
-    });
-  });
-  updateAllFileStatus();
-}
-
-function updateAllFileStatus() {
-  const parts = [];
-  function add(ds, color, label) {
-    ds.segments.forEach(seg => {
-      const tag = seg.loaded ? 'ok' : 'miss';
-      const icon = seg.loaded ? '&#10003;' : '&#10007;';
-      parts.push('<span class="'+tag+'">'+icon+' '+seg.name+' <span style="color:'+color+';">('+label+')</span></span>');
+      v.addEventListener('seeked', ()=>{
+        if(seg.pSeek>0){ seg.pSeek--; return; }
+        if(v.readyState>=1){
+          masterEpoch = vTimeToEpoch(seg.epochs, seg.vTimes, v.currentTime);
+          masterEpoch = clamp(masterEpoch, epochMin, epochMax);
+          syncUI();
+        }
+      });
     });
   }
-  add(ds1, '#ef5350', 'Red');
-  add(ds2, '#42a5f5', 'Blue');
-  document.getElementById('fsAll').innerHTML = parts.join(' &nbsp; ');
-}
+  createVidEls(ds1, vc1, blk1);
+  createVidEls(ds2, vc2, blk2);
 
-document.getElementById('vfAll').addEventListener('change', loadAllFiles);
+  // Init map
+  map = L.map('map', {zoomControl:true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+  }).addTo(map);
 
-// ======================== Hide GoPro GPS toggle ========================
-let goProGpsHidden = false;
-document.getElementById('hideGoPro').addEventListener('change', function() {
-  goProGpsHidden = this.checked;
-  if (fadeMode) {
-    [mp4Line1, mp4Line2, greyMp41, greyMp42].forEach(l=>{
-      if(!l) return;
-      if(goProGpsHidden) map.removeLayer(l); else map.addLayer(l);
-    });
-    [fadeMp41,fadeMp42].forEach(fs=>{
-      if(goProGpsHidden){
-        map.removeLayer(fs.ultraFadeIn); map.removeLayer(fs.fadeIn); map.removeLayer(fs.solid);
-        map.removeLayer(fs.fadeOut); map.removeLayer(fs.ultraFadeOut);
-      } else {
-        map.addLayer(fs.ultraFadeIn); map.addLayer(fs.fadeIn); map.addLayer(fs.solid);
-        map.addLayer(fs.fadeOut); map.addLayer(fs.ultraFadeOut);
-      }
-    });
+  // Lines
+  vakLine1 = vakTrack1.length ? L.polyline(vakTrack1.map(p=>[p.lat,p.lon]),{color:'#e53935',weight:3,opacity:0.85}).addTo(map) : null;
+  mp4Line1 = allGps1.length  ? L.polyline(allGps1.map(p=>[p.lat,p.lon]),{color:'#ef9a9a',weight:3,opacity:0.55,dashArray:'6 4'}).addTo(map) : null;
+  vakLine2 = vakTrack2.length ? L.polyline(vakTrack2.map(p=>[p.lat,p.lon]),{color:'#1e88e5',weight:3,opacity:0.85}).addTo(map) : null;
+  mp4Line2 = allGps2.length  ? L.polyline(allGps2.map(p=>[p.lat,p.lon]),{color:'#90caf9',weight:3,opacity:0.55,dashArray:'6 4'}).addTo(map) : null;
+
+  if(mp4Line1) mp4Line1.on('click', e=>onTrackClick(allGps1, e));
+  if(vakLine1) vakLine1.on('click', e=>onTrackClick(vakTrack1, e));
+  if(mp4Line2) mp4Line2.on('click', e=>onTrackClick(allGps2, e));
+  if(vakLine2) vakLine2.on('click', e=>onTrackClick(vakTrack2, e));
+
+  // Fade layers
+  greyVak1 = vakTrack1.length ? L.polyline(vakTrack1.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25}).addTo(map) : null;
+  greyMp41 = allGps1.length  ? L.polyline(allGps1.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25,dashArray:'4 3'}).addTo(map) : null;
+  greyVak2 = vakTrack2.length ? L.polyline(vakTrack2.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25}).addTo(map) : null;
+  greyMp42 = allGps2.length  ? L.polyline(allGps2.map(p=>[p.lat,p.lon]),{color:'#888',weight:2,opacity:0.25,dashArray:'4 3'}).addTo(map) : null;
+  [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.removeLayer(l); });
+
+  fadeVak1 = makeFadeSet('#e53935',4,null);
+  fadeMp41 = makeFadeSet('#ef9a9a',4,'6 4');
+  fadeVak2 = makeFadeSet('#1e88e5',4,null);
+  fadeMp42 = makeFadeSet('#90caf9',4,'6 4');
+
+  function enableFade(){
+    [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.addLayer(l); });
+    if(vakLine1) map.removeLayer(vakLine1);
+    if(mp4Line1) map.removeLayer(mp4Line1);
+    if(vakLine2) map.removeLayer(vakLine2);
+    if(mp4Line2) map.removeLayer(mp4Line2);
+    addFadeSet(fadeVak1); addFadeSet(fadeMp41);
+    addFadeSet(fadeVak2); addFadeSet(fadeMp42);
+    if(goProGpsHidden){
+      removeFadeSet(fadeMp41);
+      removeFadeSet(fadeMp42);
+    }
+  }
+  function disableFade(){
+    [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.removeLayer(l); });
+    removeFadeSet(fadeVak1); removeFadeSet(fadeMp41);
+    removeFadeSet(fadeVak2); removeFadeSet(fadeMp42);
+    if(vakLine1) map.addLayer(vakLine1);
+    if(mp4Line1 && !goProGpsHidden) map.addLayer(mp4Line1);
+    if(vakLine2) map.addLayer(vakLine2);
+    if(mp4Line2 && !goProGpsHidden) map.addLayer(mp4Line2);
+  }
+
+  // Fit bounds
+  const bounds=[];
+  [vakTrack1,allGps1,vakTrack2,allGps2].forEach(tr=>tr.forEach(p=>bounds.push([p.lat,p.lon])));
+  if(bounds.length) map.fitBounds(bounds,{padding:[20,20]});
+
+  // Markers
+  mp4Dot1 = allGps1.length ? L.circleMarker([allGps1[0].lat,allGps1[0].lon],{radius:6,color:'#ef9a9a',fillColor:'#ef9a9a',fillOpacity:0.9}).addTo(map) : null;
+  mp4Dot2 = allGps2.length ? L.circleMarker([allGps2[0].lat,allGps2[0].lon],{radius:6,color:'#90caf9',fillColor:'#90caf9',fillOpacity:0.9}).addTo(map) : null;
+  vakArrow1 = vakTrack1.length ? L.marker([vakTrack1[0].lat,vakTrack1[0].lon],{icon:arrowIcon('#e53935')}).addTo(map) : null;
+  vakArrow2 = vakTrack2.length ? L.marker([vakTrack2[0].lat,vakTrack2[0].lon],{icon:arrowIcon('#1e88e5')}).addTo(map) : null;
+
+  // Apply current toggles
+  if($('hideGoPro').checked){
+    goProGpsHidden=true;
+    if(mp4Line1) map.removeLayer(mp4Line1);
+    if(mp4Line2) map.removeLayer(mp4Line2);
+    if(mp4Dot1) mp4Dot1.setStyle({opacity:0,fillOpacity:0});
+    if(mp4Dot2) mp4Dot2.setStyle({opacity:0,fillOpacity:0});
   } else {
-    [mp4Line1, mp4Line2].forEach(l => {
-      if (!l) return;
-      if (goProGpsHidden) map.removeLayer(l); else map.addLayer(l);
-    });
+    goProGpsHidden=false;
   }
-  [mp4Dot1, mp4Dot2].forEach(d => {
-    if (!d) return;
-    if (goProGpsHidden) d.setStyle({opacity:0,fillOpacity:0});
-    else d.setStyle({opacity:1,fillOpacity:0.9});
-  });
-});
+  fadeMode = $('fadeTracks').checked;
+  if(fadeMode) enableFade(); else disableFade();
 
-// ======================== Fade tracks toggle ========================
-document.getElementById('fadeTracks').addEventListener('change', function() {
-  fadeMode = this.checked;
-  if (fadeMode) enableFade(); else disableFade();
-});
+  // Install SOG chart fresh
+  installSogChart(vakTrack1, vakTrack2);
 
-updateAllFileStatus();
+  // Expose for pose module hooks
+  window.__viewer = { get masterEpoch(){return masterEpoch;}, get playing(){return playing;},
+    ds1, ds2, epochMin, epochMax, syncUI };
 
-// ======================== Master clock ========================
-let masterEpoch = epochMin;
-let playing = false;
-let lastTs = null;
+  // Run initial sync
+  syncUI();
 
-const ppBtn  = document.getElementById('ppBtn');
-const scrub  = document.getElementById('scrub');
-const tDisp  = document.getElementById('tDisp');
-
-scrub.max = totalDur.toFixed(1);
-tDisp.textContent = '0:00 / ' + fmtElapsed(totalDur);
-
-function playAll()  { playing=true;  lastTs=null; ppBtn.innerHTML='&#9646;&#9646; Pause'; }
-function pauseAll() {
-  playing=false; lastTs=null;
-  ppBtn.innerHTML='&#9654; Play';
-  ds1.segments.forEach(s => { if(s.el && !s.el.paused) s.el.pause(); });
-  ds2.segments.forEach(s => { if(s.el && !s.el.paused) s.el.pause(); });
+  log(`Viewer rebuilt. epochMin=${epochMin}, epochMax=${epochMax}, dur=${totalDur.toFixed(1)}s`);
+  $('analyzeStat').textContent="ready";
 }
-ppBtn.addEventListener('click', () => { playing ? pauseAll() : playAll(); });
 
-document.getElementById('bk10').addEventListener('click', () => {
-  if (playing) pauseAll();
-  masterEpoch = Math.max(epochMin, masterEpoch - 10);
-  syncUI();
-});
-document.getElementById('fw10').addEventListener('click', () => {
-  if (playing) pauseAll();
-  masterEpoch = Math.min(epochMax, masterEpoch + 10);
-  syncUI();
-});
+/* =========================
+   Playback + sync logic
+========================= */
+function playAll(){ playing=true; lastTs=null; ppBtn.innerHTML='&#9646;&#9646; Pause'; }
+function pauseAll(){
+  playing=false; lastTs=null; ppBtn.innerHTML='&#9654; Play';
+  [ds1, ds2].forEach(ds=>ds.segments.forEach(s=>{ if(s.el && !s.el.paused) s.el.pause(); }));
+}
+ppBtn.addEventListener('click', ()=>{ playing?pauseAll():playAll(); });
+$('bk10').addEventListener('click', ()=>{ if(playing) pauseAll(); masterEpoch=Math.max(epochMin, masterEpoch-10); syncUI(); });
+$('fw10').addEventListener('click', ()=>{ if(playing) pauseAll(); masterEpoch=Math.min(epochMax, masterEpoch+10); syncUI(); });
 
-// Spacebar play/pause
-document.addEventListener('keydown', e => {
-  if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+document.addEventListener('keydown', e=>{
+  if(e.code==='Space' && e.target.tagName!=='INPUT' && e.target.tagName!=='TEXTAREA'){
     e.preventDefault();
-    playing ? pauseAll() : playAll();
+    playing?pauseAll():playAll();
   }
 });
 
-let scrubbing = false;
-scrub.addEventListener('input', () => {
-  scrubbing = true;
-  if (playing) pauseAll();
-  masterEpoch = epochMin + parseFloat(scrub.value || '0');
+scrub.addEventListener('input', ()=>{
+  scrubbing=true;
+  if(playing) pauseAll();
+  masterEpoch = epochMin + parseFloat(scrub.value||'0');
   syncUI();
 });
-scrub.addEventListener('change', () => { scrubbing = false; });
+scrub.addEventListener('change', ()=>{ scrubbing=false; });
 
-// ======================== Sync logic ========================
-function findActiveSeg(ds) {
-  for (let i = 0; i < ds.segments.length; i++) {
-    if (masterEpoch >= ds.segments[i].epochMin && masterEpoch <= ds.segments[i].epochMax)
-      return i;
+function findActiveSeg(ds){
+  for(let i=0;i<ds.segments.length;i++){
+    const s=ds.segments[i];
+    if(masterEpoch>=s.epochMin && masterEpoch<=s.epochMax) return i;
   }
   return -1;
 }
-
-function syncDataset(ds, blkEl) {
-  const ai = findActiveSeg(ds);
-
-  ds.segments.forEach((seg, i) => {
-    if (i === ai) {
-      seg.el.style.display = 'block';
-      // Sync this video
-      if (seg.loaded && seg.el.readyState >= 1) {
-        const target = epochToVTime(seg.epochs, seg.vTimes, masterEpoch);
-        const drift = Math.abs(seg.el.currentTime - target);
-        if (playing) {
-          if (seg.el.paused) seg.el.play().catch(()=>{});
-          if (drift > 0.5) { seg.pSeek++; seg.el.currentTime = target; }
+function syncDataset(ds, blkEl){
+  const ai=findActiveSeg(ds);
+  ds.segments.forEach((seg,i)=>{
+    if(i===ai){
+      seg.el.style.display='block';
+      if(seg.loaded && seg.el.readyState>=1){
+        const target=epochToVTime(seg.epochs, seg.vTimes, masterEpoch);
+        const drift=Math.abs(seg.el.currentTime-target);
+        if(playing){
+          if(seg.el.paused) seg.el.play().catch(()=>{});
+          if(drift>0.5){ seg.pSeek++; seg.el.currentTime=target; }
         } else {
-          if (!seg.el.paused) seg.el.pause();
-          if (drift > 0.05) { seg.pSeek++; seg.el.currentTime = target; }
+          if(!seg.el.paused) seg.el.pause();
+          if(drift>0.05){ seg.pSeek++; seg.el.currentTime=target; }
         }
       }
     } else {
-      seg.el.style.display = 'none';
-      if (!seg.el.paused) seg.el.pause();
+      seg.el.style.display='none';
+      if(seg.el && !seg.el.paused) seg.el.pause();
     }
   });
-
-  blkEl.style.display = (ai >= 0) ? 'none' : 'flex';
+  blkEl.style.display = (ai>=0) ? 'none' : 'flex';
   return ai;
 }
+function interpDsGps(allGpsArr, ep){
+  if(!allGpsArr.length) return null;
+  const epochs=allGpsArr.map(p=>p.ts);
+  return interpPos(allGpsArr, epochs, ep);
+}
 
-const oUTC  = document.getElementById('oUTC');
-const o1clip= document.getElementById('o1clip');
-const o1gps = document.getElementById('o1gps');
-const o1vak = document.getElementById('o1vak');
-const o2clip= document.getElementById('o2clip');
-const o2gps = document.getElementById('o2gps');
-const o2vak = document.getElementById('o2vak');
+function syncUI(){
+  if(!epochMax || epochMax<=epochMin) return;
 
-function syncUI() {
-  if (!scrubbing) scrub.value = (masterEpoch - epochMin).toFixed(1);
-  tDisp.textContent = fmtElapsed(masterEpoch - epochMin) + ' / ' + fmtElapsed(totalDur);
+  if(!scrubbing) scrub.value = (masterEpoch-epochMin).toFixed(1);
+  tDisp.textContent = fmtElapsed(masterEpoch-epochMin) + ' / ' + fmtElapsed(totalDur);
 
   const a1 = syncDataset(ds1, blk1);
   const a2 = syncDataset(ds2, blk2);
 
-  // Pose overlay hook (added)
-  if (window.__pose && typeof window.__pose.onSync === 'function') {
+  // Pose hook
+  if(window.__pose && typeof window.__pose.onSync === 'function'){
     window.__pose.onSync({a1,a2,masterEpoch,ds1,ds2});
   }
 
+  const vakTrack1=(ds1.vakaros&&ds1.vakaros.track)||[];
+  const vakTrack2=(ds2.vakaros&&ds2.vakaros.track)||[];
+  const vakEpochs1=vakTrack1.map(p=>p.ts);
+  const vakEpochs2=vakTrack2.map(p=>p.ts);
+
+  const allGps1=allGps(ds1);
+  const allGps2=allGps(ds2);
+  const allGps1Epochs=allGps1.map(p=>p.ts);
+  const allGps2Epochs=allGps2.map(p=>p.ts);
+
   // Map markers
   updateDot(mp4Dot1, allGps1, masterEpoch);
-  updateArrow(vakArrow1, null, masterEpoch, true, vakTrack1, vakEpochs1);
   updateDot(mp4Dot2, allGps2, masterEpoch);
-  updateArrow(vakArrow2, null, masterEpoch, true, vakTrack2, vakEpochs2);
+  updateArrow(vakArrow1, masterEpoch, vakTrack1, vakEpochs1);
+  updateArrow(vakArrow2, masterEpoch, vakTrack2, vakEpochs2);
 
-  // Fade-track update
-  if (fadeMode) updateFadeTracks(masterEpoch);
+  if(fadeMode && map && fadeVak1){
+    updateFadeTracks(masterEpoch, vakTrack1, vakEpochs1, allGps1, allGps1Epochs, vakTrack2, vakEpochs2, allGps2, allGps2Epochs);
+  }
 
   // Overlay
   oUTC.textContent = fmtEpochUTC(masterEpoch);
 
-  if (a1 >= 0) {
-    const seg = ds1.segments[a1];
-    o1clip.textContent = seg.name + ' @ ' + epochToVTime(seg.epochs,seg.vTimes,masterEpoch).toFixed(1) + 's';
-    o1gps.textContent  = fmtLL(interpDsGps(allGps1, masterEpoch));
-  } else { o1clip.textContent = '-'; o1gps.textContent = '-'; }
+  if(a1>=0){
+    const seg=ds1.segments[a1];
+    o1clip.textContent = seg.name+' @ '+epochToVTime(seg.epochs,seg.vTimes,masterEpoch).toFixed(1)+'s';
+    o1gps.textContent = fmtLL(interpDsGps(allGps1, masterEpoch));
+  } else { o1clip.textContent='-'; o1gps.textContent='-'; }
   o1vak.textContent = fmtLL(interpPos(vakTrack1, vakEpochs1, masterEpoch));
 
-  if (a2 >= 0) {
-    const seg = ds2.segments[a2];
-    o2clip.textContent = seg.name + ' @ ' + epochToVTime(seg.epochs,seg.vTimes,masterEpoch).toFixed(1) + 's';
-    o2gps.textContent  = fmtLL(interpDsGps(allGps2, masterEpoch));
-  } else { o2clip.textContent = '-'; o2gps.textContent = '-'; }
+  if(a2>=0){
+    const seg=ds2.segments[a2];
+    o2clip.textContent = seg.name+' @ '+epochToVTime(seg.epochs,seg.vTimes,masterEpoch).toFixed(1)+'s';
+    o2gps.textContent = fmtLL(interpDsGps(allGps2, masterEpoch));
+  } else { o2clip.textContent='-'; o2gps.textContent='-'; }
   o2vak.textContent = fmtLL(interpPos(vakTrack2, vakEpochs2, masterEpoch));
 }
 
-window.__viewer = { get masterEpoch(){return masterEpoch;}, set masterEpoch(v){masterEpoch=v;},
-  get playing(){return playing;}, get epochMin(){return epochMin;}, get epochMax(){return epochMax;},
-  ds1, ds2, syncUI, pauseAll, playAll
-};
-
-// ======================== Animation loop ========================
-function tick(ts) {
-  if (playing) {
-    if (lastTs !== null) {
-      masterEpoch += (ts - lastTs) / 1000;
-      if (masterEpoch >= epochMax) { masterEpoch = epochMax; pauseAll(); }
+function tick(ts){
+  if(playing){
+    if(lastTs!==null){
+      masterEpoch += (ts-lastTs)/1000;
+      if(masterEpoch>=epochMax){ masterEpoch=epochMax; pauseAll(); }
     }
-    lastTs = ts;
+    lastTs=ts;
   }
   syncUI();
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
-syncUI();
 
-// ======================== SOG timeseries chart ========================
-(function() {
-  function buildSog(track) {
-    const pts = [];
-    for (const p of track) {
-      if (p.sog !== undefined && p.sog !== null && isFinite(p.sog))
-        pts.push({ts: p.ts, sog: p.sog});
+/* =========================
+   Bottom "Import all videos" (playback bytes)
+   Match by filename
+========================= */
+function updatePlaybackFileStatus(){
+  const parts=[];
+  function add(ds, color, label){
+    ds.segments.forEach(seg=>{
+      const ok=seg.loaded;
+      parts.push(`<span class="${ok?'ok':'bad'}">${ok?'✓':'✗'} ${seg.name} <span style="color:${color}">(${label})</span></span>`);
+    });
+  }
+  add(ds1,'#ef5350','Red');
+  add(ds2,'#42a5f5','Blue');
+  $('fsAll').innerHTML = parts.join(' &nbsp; ');
+}
+$('vfAll').addEventListener('change', (ev)=>{
+  const files=Array.from(ev.target.files||[]);
+  const mapByName={};
+  files.forEach(f=>mapByName[f.name.toLowerCase()]=f);
+
+  [ds1,ds2].forEach(ds=>{
+    ds.segments.forEach(seg=>{
+      const f=mapByName[seg.name.toLowerCase()];
+      if(f && seg.el){
+        seg.el.src = URL.createObjectURL(f);
+        seg.el.load();
+        seg.loaded=true;
+      }
+    });
+  });
+
+  updatePlaybackFileStatus();
+});
+
+/* =========================
+   Hide GoPro + Fade toggles
+========================= */
+$('hideGoPro').addEventListener('change', function(){
+  goProGpsHidden = this.checked;
+  if(!map) return;
+
+  const hide = (l)=>{ if(l) map.removeLayer(l); };
+  const show = (l)=>{ if(l) map.addLayer(l); };
+
+  if(fadeMode){
+    // if fade mode, dashed layers are in fadeMp41/fadeMp42 sets
+    if(goProGpsHidden){
+      if(mp4Line1) hide(mp4Line1);
+      if(mp4Line2) hide(mp4Line2);
+      if(greyMp41) hide(greyMp41);
+      if(greyMp42) hide(greyMp42);
+      if(fadeMp41) removeFadeSet(fadeMp41);
+      if(fadeMp42) removeFadeSet(fadeMp42);
+    } else {
+      if(mp4Line1) show(mp4Line1);
+      if(mp4Line2) show(mp4Line2);
+      // grey lines only shown in fade mode; handled by enableFade/disableFade
     }
-    pts.sort((a,b) => a.ts - b.ts);
-    return pts;
+  } else {
+    if(goProGpsHidden){ hide(mp4Line1); hide(mp4Line2); }
+    else { show(mp4Line1); show(mp4Line2); }
   }
 
-  const sog1 = buildSog(vakTrack1);
-  const sog2 = buildSog(vakTrack2);
-  if (sog1.length === 0 && sog2.length === 0) return;
+  if(mp4Dot1) mp4Dot1.setStyle({opacity:goProGpsHidden?0:1, fillOpacity:goProGpsHidden?0:0.9});
+  if(mp4Dot2) mp4Dot2.setStyle({opacity:goProGpsHidden?0:1, fillOpacity:goProGpsHidden?0:0.9});
+});
 
-  const sogBar = document.getElementById('sogBar');
-  sogBar.style.display = '';
+$('fadeTracks').addEventListener('change', function(){
+  fadeMode = this.checked;
+  if(!map || !fadeVak1) return;
 
-  const canvas = document.getElementById('sogCanvas');
-  const ctx = canvas.getContext('2d');
-
-  let sogMax = 0;
-  for (const p of sog1) sogMax = Math.max(sogMax, p.sog);
-  for (const p of sog2) sogMax = Math.max(sogMax, p.sog);
-  if (sogMax <= 0) sogMax = 1;
-  sogMax *= 1.1;
-
-  // Zoom state
-  let sogZoom = 1;
-  let sogViewLo = epochMin;
-  let sogViewHi = epochMax;
-
-  function resize() {
-    const r = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.round(r.width));
-    canvas.height = Math.max(1, Math.round(r.height));
+  function enableFade(){
+    [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.addLayer(l); });
+    if(vakLine1) map.removeLayer(vakLine1);
+    if(mp4Line1) map.removeLayer(mp4Line1);
+    if(vakLine2) map.removeLayer(vakLine2);
+    if(mp4Line2) map.removeLayer(mp4Line2);
+    addFadeSet(fadeVak1); addFadeSet(fadeMp41);
+    addFadeSet(fadeVak2); addFadeSet(fadeMp42);
+    if(goProGpsHidden){
+      removeFadeSet(fadeMp41);
+      removeFadeSet(fadeMp42);
+    }
+  }
+  function disableFade(){
+    [greyVak1,greyMp41,greyVak2,greyMp42].forEach(l=>{ if(l) map.removeLayer(l); });
+    removeFadeSet(fadeVak1); removeFadeSet(fadeMp41);
+    removeFadeSet(fadeVak2); removeFadeSet(fadeMp42);
+    if(vakLine1) map.addLayer(vakLine1);
+    if(mp4Line1 && !goProGpsHidden) map.addLayer(mp4Line1);
+    if(vakLine2) map.addLayer(vakLine2);
+    if(mp4Line2 && !goProGpsHidden) map.addLayer(mp4Line2);
   }
 
-  function xOf(ts) {
-    const frac = (ts - sogViewLo) / (sogViewHi - sogViewLo);
-    return frac * canvas.width;
-  }
-  function yOf(sog) {
-    const frac = sog / sogMax;
-    return canvas.height - frac * canvas.height;
+  if(fadeMode) enableFade(); else disableFade();
+});
+
+/* =========================
+   SOG chart (from Vakaros track)
+========================= */
+function installSogChart(vakTrack1, vakTrack2){
+  // remove previous behavior safely (simpler: just re-install once per rebuild)
+  // We'll re-use same canvas; if already installed, it will still work since it uses current masterEpoch/epochMin/epochMax.
+  const sog1 = vakTrack1.filter(p=>p.sog!=null && isFinite(p.sog)).map(p=>({ts:p.ts,sog:p.sog})).sort((a,b)=>a.ts-b.ts);
+  const sog2 = vakTrack2.filter(p=>p.sog!=null && isFinite(p.sog)).map(p=>({ts:p.ts,sog:p.sog})).sort((a,b)=>a.ts-b.ts);
+
+  if(!sog1.length && !sog2.length){
+    $('sogBar').style.display='none';
+    sogInstalled=false;
+    return;
   }
 
-  function drawLine(series, color) {
-    if (!series.length) return;
+  $('sogBar').style.display='';
+  const canvas=$('sogCanvas');
+  const ctx=canvas.getContext('2d');
+
+  let sogMax=1;
+  for(const p of sog1) sogMax=Math.max(sogMax,p.sog);
+  for(const p of sog2) sogMax=Math.max(sogMax,p.sog);
+  sogMax*=1.1;
+
+  let sogZoom=1;
+  let viewLo=epochMin, viewHi=epochMax;
+
+  function resize(){
+    const r=canvas.getBoundingClientRect();
+    canvas.width=Math.max(1,Math.round(r.width));
+    canvas.height=Math.max(1,Math.round(r.height));
+  }
+  function updateView(){
+    const span=(epochMax-epochMin)/sogZoom;
+    const mid=clamp(masterEpoch,epochMin,epochMax);
+    viewLo=clamp(mid-span/2, epochMin, epochMax-span);
+    viewHi=viewLo+span;
+  }
+  function xOf(ts){ return ((ts-viewLo)/(viewHi-viewLo))*canvas.width; }
+  function yOf(sog){ return canvas.height - (sog/sogMax)*canvas.height; }
+
+  function drawSeries(series, color){
+    if(!series.length) return;
     ctx.beginPath();
-    let started = false;
-    for (const p of series) {
-      if (p.ts < sogViewLo || p.ts > sogViewHi) continue;
-      const x = xOf(p.ts);
-      const y = yOf(p.sog);
-      if (!started) { ctx.moveTo(x,y); started = true; }
+    let started=false;
+    for(const p of series){
+      if(p.ts<viewLo || p.ts>viewHi) continue;
+      const x=xOf(p.ts), y=yOf(p.sog);
+      if(!started){ ctx.moveTo(x,y); started=true; }
       else ctx.lineTo(x,y);
     }
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.strokeStyle=color;
+    ctx.lineWidth=2;
     ctx.stroke();
   }
 
-  function renderStatic() {
+  function render(){
     resize();
+    updateView();
     ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    // grid
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 1;
-    for (let i=1;i<5;i++){
-      const y = i*canvas.height/5;
+    ctx.strokeStyle="rgba(255,255,255,0.08)";
+    ctx.lineWidth=1;
+    for(let i=1;i<5;i++){
+      const y=i*canvas.height/5;
       ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
     }
+    drawSeries(sog1,"#ef5350");
+    drawSeries(sog2,"#42a5f5");
 
-    drawLine(sog1, "#ef5350");
-    drawLine(sog2, "#42a5f5");
-  }
-
-  function drawCursor() {
-    const x = xOf(masterEpoch);
-    ctx.strokeStyle = "rgba(255,255,255,0.65)";
-    ctx.lineWidth = 1;
+    // cursor
+    const x=xOf(masterEpoch);
+    ctx.strokeStyle="rgba(255,255,255,0.65)";
     ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
   }
 
-  function updateView() {
-    const span = (epochMax - epochMin) / sogZoom;
-    const mid = clamp(masterEpoch, epochMin, epochMax);
-    sogViewLo = clamp(mid - span/2, epochMin, epochMax - span);
-    sogViewHi = sogViewLo + span;
-  }
+  // hook buttons
+  $('sogZoomIn').onclick=()=>{ sogZoom=Math.min(sogZoom*2,64); render(); };
+  $('sogZoomOut').onclick=()=>{ sogZoom=Math.max(sogZoom/2,1); render(); };
+  $('sogZoomReset').onclick=()=>{ sogZoom=1; render(); };
 
-  window.addEventListener('resize', () => { renderStatic(); drawCursor(); });
-
-  document.getElementById('sogZoomIn').addEventListener('click', () => {
-    sogZoom = Math.min(sogZoom * 2, 64);
-    updateView();
-    renderStatic(); drawCursor();
-  });
-  document.getElementById('sogZoomOut').addEventListener('click', () => {
-    sogZoom = Math.max(sogZoom / 2, 1);
-    updateView();
-    renderStatic(); drawCursor();
-  });
-  document.getElementById('sogZoomReset').addEventListener('click', () => {
-    sogZoom = 1;
-    updateView();
-    renderStatic(); drawCursor();
-  });
-
-  // Drag / click to scrub
-  let sogDragging = false;
-  function sogScrub(e) {
-    const rect = canvas.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const vSpan = sogViewHi - sogViewLo;
-    masterEpoch = sogViewLo + frac * vSpan;
-    masterEpoch = Math.max(epochMin, Math.min(epochMax, masterEpoch));
-    if (playing) pauseAll();
+  let dragging=false;
+  function scrubTo(e){
+    const rect=canvas.getBoundingClientRect();
+    const frac=clamp((e.clientX-rect.left)/rect.width,0,1);
+    const span=viewHi-viewLo;
+    masterEpoch=viewLo+frac*span;
+    masterEpoch=clamp(masterEpoch, epochMin, epochMax);
+    if(playing) pauseAll();
     syncUI();
+    render();
   }
-  canvas.addEventListener('mousedown', e => { sogDragging = true; sogScrub(e); });
-  window.addEventListener('mousemove', e => { if (sogDragging) sogScrub(e); });
-  window.addEventListener('mouseup', () => { sogDragging = false; });
+  canvas.onmousedown=(e)=>{ dragging=true; scrubTo(e); };
+  window.onmousemove=(e)=>{ if(dragging) scrubTo(e); };
+  window.onmouseup=()=>{ dragging=false; };
 
-  canvas.addEventListener('touchstart', e => {
-    sogDragging = true;
-    sogScrub(e.touches[0]);
-    e.preventDefault();
-  }, {passive:false});
-  canvas.addEventListener('touchmove', e => {
-    if (sogDragging) { sogScrub(e.touches[0]); e.preventDefault(); }
-  }, {passive:false});
-  canvas.addEventListener('touchend', () => { sogDragging = false; });
+  canvas.addEventListener('touchstart', e=>{ dragging=true; scrubTo(e.touches[0]); e.preventDefault(); }, {passive:false});
+  canvas.addEventListener('touchmove', e=>{ if(dragging){ scrubTo(e.touches[0]); e.preventDefault(); } }, {passive:false});
+  canvas.addEventListener('touchend', ()=>{ dragging=false; });
 
-  // initial render
-  updateView();
-  renderStatic();
-  const oldSyncUI = syncUI;
-  // keep cursor synced with masterEpoch
-  syncUI = function() {
-    oldSyncUI();
-    updateView();
-    renderStatic();
-    drawCursor();
-  };
-})();
-</script>
+  window.addEventListener('resize', render);
+  sogInstalled=true;
 
-<script type="module">
-import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+  // integrate render into sync loop lightly
+  const oldSync = syncUI;
+  syncUI = function(){ oldSync(); if(sogInstalled) render(); };
 
-/**
- * Pose overlay for BOTH video panes.
- *
- *  - Works with the existing master-clock syncing (no seeking in the pose engine).
- *  - Evenly sampled by media-time (currentTime) with a fixed Pose FPS.
- *  - Draws directly to overlay canvases above each pane.
- */
-
-const UI = {
-  enable: document.getElementById('poseEnable'),
-  red: document.getElementById('poseRed'),
-  blue: document.getElementById('poseBlue'),
-  fps: document.getElementById('poseFps'),
-  maxRate: document.getElementById('poseMaxRate'),
-  warmup: document.getElementById('poseWarmup'),
-  clear: document.getElementById('poseClear'),
-  stat: document.getElementById('poseStat'),
-  c1: document.getElementById('poseCanvas1'),
-  c2: document.getElementById('poseCanvas2'),
-  vc1: document.getElementById('vc1'),
-  vc2: document.getElementById('vc2'),
-};
-
-let poseLandmarker = null;
-let modelLoading = false;
-
-function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
-function now(){ return performance.now(); }
-function setPoseStat(msg){ UI.stat.textContent = "Pose: " + msg; }
-
-function desiredFps(){
-  const v = parseInt(UI.fps.value || "5", 10);
-  return clamp(isFinite(v) ? v : 5, 1, 30);
-}
-function maxRate(){
-  const v = parseInt(UI.maxRate.value || "8", 10);
-  return clamp(isFinite(v) ? v : 8, 1, 16);
+  render();
 }
 
-async function ensureModel(){
-  if (poseLandmarker) return poseLandmarker;
-  if (modelLoading) return null;
-  modelLoading = true;
-  setPoseStat("loading model…");
-  UI.warmup.disabled = true;
+/* =========================
+   Vakaros CSV parsing (simple + robust)
+   Expected columns: time/date + lat + lon + (optional) sog
+========================= */
+function parseCsv(text){
+  // Minimal CSV splitter (handles quotes, commas)
+  const rows=[];
+  let row=[], cur="", inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(ch === '"'){ inQ=!inQ; continue; }
+    if(!inQ && (ch===',' || ch==='\n' || ch==='\r')){
+      if(ch===',' ){ row.push(cur); cur=""; continue; }
+      // newline
+      if(cur.length || row.length){ row.push(cur); rows.push(row); }
+      row=[]; cur="";
+      // swallow \r\n
+      if(ch==='\r' && text[i+1]==='\n') i++;
+      continue;
+    }
+    cur+=ch;
+  }
+  if(cur.length || row.length){ row.push(cur); rows.push(row); }
+  return rows;
+}
+function normalizeHeader(h){ return (h||"").trim().toLowerCase(); }
+function findCol(headers, candidates){
+  for(const c of candidates){
+    const idx=headers.indexOf(c);
+    if(idx>=0) return idx;
+  }
+  return -1;
+}
+function parseVakarosCsv(text){
+  const rows=parseCsv(text);
+  if(rows.length<2) return [];
+  const headers=rows[0].map(normalizeHeader);
+
+  const iLat=findCol(headers, ["lat","latitude"]);
+  const iLon=findCol(headers, ["lon","lng","longitude"]);
+  // time candidates
+  const iIso=findCol(headers, ["utc","time","timestamp","datetime","date"]);
+  const iTsMs=findCol(headers, ["timestamp_ms","ts_ms","time_ms","epoch_ms"]);
+  const iTs=findCol(headers, ["epoch","epoch_s","timestamp_s","ts","unix"]);
+
+  const iSog=findCol(headers, ["sog","speed","speed_m_s","speed(ms)","speed_mps"]);
+
+  const out=[];
+  for(let r=1;r<rows.length;r++){
+    const cols=rows[r];
+    const lat=parseFloat(cols[iLat]); const lon=parseFloat(cols[iLon]);
+    if(!isFinite(lat) || !isFinite(lon)) continue;
+
+    let ts=null;
+    if(iTsMs>=0 && cols[iTsMs]){
+      const ms=parseFloat(cols[iTsMs]);
+      if(isFinite(ms)) ts=ms/1000;
+    } else if(iTs>=0 && cols[iTs]){
+      const s=parseFloat(cols[iTs]);
+      if(isFinite(s)) ts=s;
+    } else if(iIso>=0 && cols[iIso]){
+      const ms=Date.parse(cols[iIso]);
+      if(Number.isFinite(ms)) ts=ms/1000;
+    }
+    if(!isFinite(ts)) continue;
+
+    const sog = (iSog>=0) ? parseFloat(cols[iSog]) : null;
+
+    out.push({ts, lat, lon, sog: (isFinite(sog)?sog:null)});
+  }
+  out.sort((a,b)=>a.ts-b.ts);
+  return out;
+}
+$('applyVakBtn').addEventListener('click', async ()=>{
+  const files=Array.from($('vakInput').files||[]);
+  if(!files.length){ $('vakStat').textContent="none"; return; }
+  let merged=[];
+  for(const f of files){
+    const text=await f.text();
+    const pts=parseVakarosCsv(text);
+    merged = merged.concat(pts);
+    log(`Parsed Vakaros CSV ${f.name}: ${pts.length} pts`);
+  }
+  merged.sort((a,b)=>a.ts-b.ts);
+  // Apply: if both athletes exist, split by time overlap? Simple approach:
+  // - If only one dataset has segments, apply to that.
+  // - Otherwise apply merged to BOTH (user can load 2 separate CSVs if desired).
+  if(ds1.segments.length && !ds2.segments.length){
+    ds1.vakaros.track = merged;
+  } else if(ds2.segments.length && !ds1.segments.length){
+    ds2.vakaros.track = merged;
+  } else {
+    ds1.vakaros.track = merged;
+    ds2.vakaros.track = merged;
+  }
+  $('vakStat').textContent = `loaded ${merged.length} pts`;
+  rebuildMapAndViewer();
+});
+
+/* =========================
+   File table + assignment
+========================= */
+let analyzedFiles = []; // {file, name, gps, epochMin, epochMax, assign:"red"|"blue"}
+function guessAssign(name){
+  // Heuristic: common camera naming patterns
+  const n=name.toLowerCase();
+  if(n.includes("red") || n.includes("cam1") || n.includes("athlete1") || n.includes("gopro1")) return "red";
+  if(n.includes("blue")|| n.includes("cam2") || n.includes("athlete2") || n.includes("gopro2")) return "blue";
+  // GoPro chapter naming: GX01..., GX02... etc
+  const m=n.match(/gx0?([12])/);
+  if(m) return (m[1]==="1" ? "red" : "blue");
+  return "red";
+}
+function renderFileTable(){
+  const tb=$('fileTable');
+  tb.innerHTML="";
+  analyzedFiles.forEach((it, idx)=>{
+    const tr=document.createElement('tr');
+    const dtStart = isFinite(it.epochMin) ? fmtEpochUTC(it.epochMin) : "-";
+    const dtEnd   = isFinite(it.epochMax) ? fmtEpochUTC(it.epochMax) : "-";
+    const statusClass = it.gps.length ? "ok" : "bad";
+    const statusText = it.gps.length ? "ok" : "no gps";
+    tr.innerHTML = `
+      <td class="mono">${it.name}</td>
+      <td>
+        <select data-idx="${idx}">
+          <option value="red" ${it.assign==="red"?"selected":""}>Red</option>
+          <option value="blue" ${it.assign==="blue"?"selected":""}>Blue</option>
+        </select>
+      </td>
+      <td class="mono">${it.gps.length}</td>
+      <td class="mono">${dtStart}</td>
+      <td class="mono">${dtEnd}</td>
+      <td class="mono ${statusClass}">${statusText}</td>
+    `;
+    tb.appendChild(tr);
+  });
+
+  tb.querySelectorAll('select').forEach(sel=>{
+    sel.addEventListener('change', (e)=>{
+      const idx=parseInt(e.target.getAttribute('data-idx'),10);
+      analyzedFiles[idx].assign = e.target.value;
+    });
+  });
+}
+
+/* =========================
+   Analyze MP4 telemetry locally (Option A)
+   Uses: gpmf-extract + gopro-telemetry from CDN as ES modules
+========================= */
+async function extractGpsFromMp4(file, onProgress){
+  // Dynamic import from CDN (keeps single HTML)
+  const { default: gpmfExtract } = await import("https://cdn.jsdelivr.net/npm/gpmf-extract@0.1.9/dist/gpmf-extract.esm.js");
+  const { default: goproTelemetry } = await import("https://cdn.jsdelivr.net/npm/gopro-telemetry@1.2.9/dist/gopro-telemetry.esm.js");
+
+  const extracted = await gpmfExtract(file, {
+    browserMode: true,
+    useWorker: false, // iPad stability
+    progress: (p)=>{ if(onProgress) onProgress(p); }
+  });
+
+  const telemetry = await goproTelemetry(extracted, {
+    stream: ["GPS"],
+    // groupTimes: 200, // uncomment to reduce output size (ms groups)
+  });
+
+  // Normalize stream(s) → points {ts,lat,lon,t,sog?}
+  // gopro-telemetry structure varies; this walker is intentionally permissive.
+  const points=[];
+  const devices = telemetry && typeof telemetry==="object" ? telemetry : {};
+  for(const devKey of Object.keys(devices)){
+    const dev=devices[devKey];
+    if(!dev || typeof dev!=="object") continue;
+
+    for(const streamKey of Object.keys(dev)){
+      const stream=dev[streamKey];
+      const samples = stream?.samples || stream?.values || stream;
+      if(!Array.isArray(samples)) continue;
+
+      for(const s of samples){
+        // Try common fields
+        const dateStr = s.date || s.time || s.datetime;
+        const ctsMs = (s.cts ?? s.t ?? s.timeMs ?? null);
+
+        // lat/lon may be direct fields or inside s.value array
+        const lat = s.lat ?? s.latitude ?? (Array.isArray(s.value) ? s.value[0] : null);
+        const lon = s.lon ?? s.longitude ?? (Array.isArray(s.value) ? s.value[1] : null);
+
+        if(!isFinite(lat) || !isFinite(lon)) continue;
+
+        let ts=null;
+        if(typeof dateStr === "string"){
+          const ms=Date.parse(dateStr);
+          if(Number.isFinite(ms)) ts=ms/1000;
+        }
+        if(!isFinite(ts)) continue;
+
+        let t=null;
+        if(ctsMs!=null && isFinite(ctsMs)) t = ctsMs/1000;
+
+        const sog = isFinite(s.speed) ? s.speed : (isFinite(s.sog) ? s.sog : null);
+
+        points.push({ ts, lat, lon, t, sog });
+      }
+    }
+  }
+
+  points.sort((a,b)=>a.ts-b.ts);
+  if(points.length){
+    // If t missing, derive from first ts (viewer needs vTimes)
+    const t0 = points[0].t != null ? points[0].t : 0;
+    const ts0 = points[0].ts;
+    for(const p of points){
+      if(p.t == null){
+        p.t = p.ts - ts0;
+      } else {
+        // normalize t to start at ~0 if it isn't
+        p.t = p.t - t0;
+      }
+    }
+  }
+  return points;
+}
+
+$('analyzeBtn').addEventListener('click', async ()=>{
+  const files=Array.from($('mp4Input').files||[]);
+  if(!files.length){
+    $('analyzeStat').textContent="no files";
+    log("No MP4 files selected.", "warn");
+    return;
+  }
+
+  $('analyzeBtn').disabled=true;
+  $('analyzeStat').textContent="analyzing…";
+  $('fileTable').innerHTML="";
+  analyzedFiles=[];
+  log(`Starting telemetry analysis for ${files.length} MP4 file(s)…`);
+
   try{
-    const t0 = now();
+    for(let i=0;i<files.length;i++){
+      const f=files[i];
+      $('analyzeStat').textContent=`${i+1}/${files.length} ${f.name}`;
+      log(`Extracting GPS from ${f.name}…`);
+      const gps = await extractGpsFromMp4(f, (p)=>{
+        $('analyzeStat').textContent=`${i+1}/${files.length} ${f.name} · ${Math.round(p)}%`;
+      });
+
+      const epochMin = gps.length ? gps[0].ts : NaN;
+      const epochMax = gps.length ? gps[gps.length-1].ts : NaN;
+
+      analyzedFiles.push({
+        file:f,
+        name:f.name,
+        gps,
+        epochMin,
+        epochMax,
+        assign: guessAssign(f.name)
+      });
+
+      log(`→ ${f.name}: ${gps.length} pts`);
+    }
+
+    renderFileTable();
+    $('analyzeStat').textContent="done (review assignment)";
+    log("Telemetry analysis completed. Review assignment and click Rebuild.");
+  }catch(e){
+    $('analyzeStat').textContent="error";
+    log(`ERROR: ${e?.message || e}`, "error");
+    console.error(e);
+  }finally{
+    $('analyzeBtn').disabled=false;
+  }
+});
+
+$('rebuildBtn').addEventListener('click', ()=>{
+  if(!analyzedFiles.length){
+    log("Nothing to rebuild. Analyze MP4 telemetry first.", "warn");
+    return;
+  }
+  // Build ds1/ds2 segments
+  const redSegs=[], blueSegs=[];
+  for(const it of analyzedFiles){
+    if(!it.gps.length) continue;
+    const seg={
+      name: it.name,
+      gps: it.gps,
+      epochMin: it.epochMin,
+      epochMax: it.epochMax
+    };
+    if(it.assign==="blue") blueSegs.push(seg);
+    else redSegs.push(seg);
+  }
+  redSegs.sort((a,b)=>a.epochMin-b.epochMin);
+  blueSegs.sort((a,b)=>a.epochMin-b.epochMin);
+
+  ds1 = { segments: redSegs, vakaros: ds1.vakaros || {track:[]} };
+  ds2 = { segments: blueSegs, vakaros: ds2.vakaros || {track:[]} };
+
+  log(`Rebuilt ds1 (red) segments=${ds1.segments.length}, ds2 (blue) segments=${ds2.segments.length}`);
+  rebuildMapAndViewer();
+  updatePlaybackFileStatus();
+});
+
+/* =========================
+   Pose overlay (both panes)
+========================= */
+const PoseUI = {
+  enable:$('poseEnable'), red:$('poseRed'), blue:$('poseBlue'),
+  fps:$('poseFps'), warmup:$('poseWarmup'), clear:$('poseClear'),
+  stat:$('poseStat'),
+  c1:$('poseCanvas1'), c2:$('poseCanvas2')
+};
+let poseLandmarker=null;
+let poseLoading=false;
+const poseState={ lastT1:-1,lastT2:-1, samples1:0,samples2:0, poses1:0,poses2:0, lastDrawAt:0 };
+
+function poseFps(){ const v=parseInt(PoseUI.fps.value||"5",10); return clamp(isFinite(v)?v:5,1,30); }
+function setPoseStat(s){ PoseUI.stat.textContent="Pose: "+s; }
+
+function resizeCanvasToElement(canvas, el){
+  const r=el.getBoundingClientRect();
+  const w=Math.max(1,Math.round(r.width));
+  const h=Math.max(1,Math.round(r.height));
+  if(canvas.width!==w || canvas.height!==h){ canvas.width=w; canvas.height=h; }
+}
+function containRect(containerW, containerH, contentW, contentH){
+  const s=Math.min(containerW/contentW, containerH/contentH);
+  const w=contentW*s, h=contentH*s;
+  const x=(containerW-w)/2, y=(containerH-h)/2;
+  return {x,y,w,h};
+}
+function clearPose(){
+  [PoseUI.c1,PoseUI.c2].forEach(c=>{
+    const ctx=c.getContext('2d');
+    ctx.clearRect(0,0,c.width,c.height);
+  });
+  poseState.samples1=poseState.samples2=poseState.poses1=poseState.poses2=0;
+  poseState.lastT1=poseState.lastT2=-1;
+}
+
+PoseUI.clear.addEventListener('click', clearPose);
+
+async function ensurePose(){
+  if(poseLandmarker) return poseLandmarker;
+  if(poseLoading) return null;
+  poseLoading=true;
+  setPoseStat("loading…");
+  try{
+    const [{PoseLandmarker, FilesetResolver}] = await Promise.all([
+      import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs")
+    ]);
     const vision = await FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
     );
     poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-      },
-      runningMode: "VIDEO",
-      numPoses: 1
+      baseOptions:{ modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task" },
+      runningMode:"VIDEO",
+      numPoses:1
     });
-    const ms = Math.round(now() - t0);
-    setPoseStat("ready ("+ms+" ms)");
+    setPoseStat("ready");
     return poseLandmarker;
   }catch(e){
     console.error(e);
-    setPoseStat("ERROR loading model");
+    setPoseStat("ERROR");
     return null;
   }finally{
-    modelLoading = false;
-    UI.warmup.disabled = false;
+    poseLoading=false;
   }
 }
 
-function clearCanvas(c){
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0,0,c.width,c.height);
-}
-function clearAll(){
-  clearCanvas(UI.c1);
-  clearCanvas(UI.c2);
-}
-UI.clear.addEventListener('click', clearAll);
-
-UI.warmup.addEventListener('click', async () => {
-  await ensureModel();
-  if (UI.enable.checked && poseLandmarker) setPoseStat("on");
+PoseUI.warmup.addEventListener('click', async ()=>{
+  await ensurePose();
 });
 
-UI.enable.addEventListener('change', async () => {
-  if (UI.enable.checked){
-    await ensureModel();
-    if (poseLandmarker){
-      UI.vc1.classList.add('pose-on');
-      UI.vc2.classList.add('pose-on');
-      setPoseStat("on");
-    } else {
-      UI.enable.checked = false;
-      setPoseStat("off");
-    }
+PoseUI.enable.addEventListener('change', async ()=>{
+  if(PoseUI.enable.checked){
+    await ensurePose();
+    if(!poseLandmarker){ PoseUI.enable.checked=false; return; }
+    setPoseStat("on");
   } else {
-    UI.vc1.classList.remove('pose-on');
-    UI.vc2.classList.remove('pose-on');
     setPoseStat("off");
   }
 });
 
-function resizeCanvasToElement(canvas, el){
-  const r = el.getBoundingClientRect();
-  const w = Math.max(1, Math.round(r.width));
-  const h = Math.max(1, Math.round(r.height));
-  if (canvas.width !== w || canvas.height !== h){
-    canvas.width = w; canvas.height = h;
-  }
-}
-
-function containRect(containerW, containerH, contentW, contentH){
-  // object-fit: contain
-  const s = Math.min(containerW / contentW, containerH / contentH);
-  const w = contentW * s, h = contentH * s;
-  const x = (containerW - w) / 2;
-  const y = (containerH - h) / 2;
-  return {x,y,w,h,scale:s};
-}
-
 function drawSkeleton(ctx, rect, landmarks, alpha){
-  const {x,y,w,h} = rect;
+  const {x,y,w,h}=rect;
   ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(255,255,255,0.80)";
-  ctx.fillStyle   = "rgba(0,0,0,0.75)";
-
-  const conn = [
-    [11,13],[13,15],
-    [12,14],[14,16],
-    [11,12],
-    [23,24],
-    [11,23],[12,24],
-    [23,25],[25,27],
-    [24,26],[26,28]
-  ];
-
-  for (const [a,b] of conn){
+  ctx.globalAlpha=alpha;
+  ctx.lineWidth=2;
+  ctx.strokeStyle="rgba(255,255,255,0.85)";
+  ctx.fillStyle="rgba(0,0,0,0.75)";
+  const conn=[[11,13],[13,15],[12,14],[14,16],[11,12],[23,24],[11,23],[12,24],[23,25],[25,27],[24,26],[26,28]];
+  for(const [a,b] of conn){
     const A=landmarks[a], B=landmarks[b];
-    if (!A || !B) continue;
-    const x1 = x + A.x * w, y1 = y + A.y * h;
-    const x2 = x + B.x * w, y2 = y + B.y * h;
-    ctx.beginPath();
-    ctx.moveTo(x1,y1);
-    ctx.lineTo(x2,y2);
-    ctx.stroke();
+    if(!A||!B) continue;
+    const x1=x+A.x*w, y1=y+A.y*h;
+    const x2=x+B.x*w, y2=y+B.y*h;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
   }
-
   const pts=[0,11,12,13,14,15,16,23,24,25,26,27,28];
-  for (const i of pts){
-    const p=landmarks[i];
-    if(!p) continue;
-    const px = x + p.x*w, py = y + p.y*h;
-    ctx.beginPath();
-    ctx.arc(px,py,2.2,0,Math.PI*2);
-    ctx.fill();
+  for(const i of pts){
+    const p=landmarks[i]; if(!p) continue;
+    const px=x+p.x*w, py=y+p.y*h;
+    ctx.beginPath(); ctx.arc(px,py,2.2,0,Math.PI*2); ctx.fill();
   }
   ctx.restore();
 }
 
 function getActiveVideo(ds, idx){
-  if (idx == null || idx < 0) return null;
-  const seg = ds.segments[idx];
-  if (!seg || !seg.el) return null;
-  if (!seg.loaded) return null;
-  if (seg.el.readyState < 2) return null;
+  if(idx==null || idx<0) return null;
+  const seg=ds.segments[idx];
+  if(!seg || !seg.el) return null;
+  if(!seg.loaded) return null;
+  if(seg.el.readyState<2) return null;
   return seg.el;
 }
 
-const state = {
-  lastSampleT1: -1,
-  lastSampleT2: -1,
-  samples1: 0, samples2: 0,
-  poses1: 0, poses2: 0,
-  lastDrawAt: 0,
-};
-
-function detectAndDraw(video, canvas, container, lastKey){
-  resizeCanvasToElement(canvas, container);
-  const ctx = canvas.getContext('2d');
-
-  // light persistence trail
-  ctx.fillStyle = "rgba(0,0,0,0.06)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  const rect = containRect(canvas.width, canvas.height, video.videoWidth || 1, video.videoHeight || 1);
-
-  const fps = desiredFps();
-  const t = video.currentTime;
-  const step = 1 / fps;
-
-  const lastT = state[lastKey];
-  if (lastT >= 0 && (t - lastT) < step) return false;
-  state[lastKey] = t;
-
-  const tsMs = Math.round(t * 1000);
-  const res = poseLandmarker.detectForVideo(video, tsMs);
-  if (res?.landmarks?.length){
-    drawSkeleton(ctx, rect, res.landmarks[0], 0.22);
-    return true;
-  }
-  return false;
-}
-
-// Called by syncUI() (main script)
 window.__pose = {
-  onSync: async ({a1,a2,masterEpoch,ds1,ds2}) => {
-    if (!UI.enable.checked) return;
+  onSync: async ({a1,a2,masterEpoch,ds1,ds2})=>{
+    if(!PoseUI.enable.checked) return;
+    if(!poseLandmarker){
+      await ensurePose();
+      if(!poseLandmarker) return;
+    }
+    // throttle
+    const tnow=performance.now();
+    if(tnow-poseState.lastDrawAt<10) return;
+    poseState.lastDrawAt=tnow;
 
-    if (!poseLandmarker) {
-      await ensureModel();
-      if (!poseLandmarker) return;
-      UI.vc1.classList.add('pose-on');
-      UI.vc2.classList.add('pose-on');
-      setPoseStat("on");
+    const fps=poseFps();
+    const step=1/fps;
+
+    const v1=getActiveVideo(ds1,a1);
+    const v2=getActiveVideo(ds2,a2);
+
+    if(v1 && PoseUI.red.checked){
+      resizeCanvasToElement(PoseUI.c1, vc1);
+      const ctx=PoseUI.c1.getContext('2d');
+      // trail fade
+      ctx.fillStyle="rgba(0,0,0,0.06)";
+      ctx.fillRect(0,0,PoseUI.c1.width,PoseUI.c1.height);
+
+      const t=v1.currentTime;
+      if(poseState.lastT1<0 || (t-poseState.lastT1)>=step){
+        poseState.lastT1=t;
+        poseState.samples1++;
+        const rect=containRect(PoseUI.c1.width,PoseUI.c1.height, v1.videoWidth||1, v1.videoHeight||1);
+        const res=poseLandmarker.detectForVideo(v1, Math.round(t*1000));
+        if(res?.landmarks?.length){
+          poseState.poses1++;
+          drawSkeleton(ctx,rect,res.landmarks[0],0.22);
+        }
+      }
     }
 
-    // Guard playbackRate if something else changes it
-    const cap = maxRate();
-    const v1 = getActiveVideo(ds1, a1);
-    const v2 = getActiveVideo(ds2, a2);
-    [v1,v2].forEach(v=>{
-      if(!v) return;
-      if(v.playbackRate > cap) v.playbackRate = cap;
-      if(v.playbackRate < 0.25) v.playbackRate = 0.25;
-    });
+    if(v2 && PoseUI.blue.checked){
+      resizeCanvasToElement(PoseUI.c2, vc2);
+      const ctx=PoseUI.c2.getContext('2d');
+      ctx.fillStyle="rgba(0,0,0,0.06)";
+      ctx.fillRect(0,0,PoseUI.c2.width,PoseUI.c2.height);
 
-    // Throttle overall pose work (keep iPad responsive)
-    const tnow = now();
-    if (tnow - state.lastDrawAt < 10) return;
-    state.lastDrawAt = tnow;
-
-    if (v1 && UI.red.checked) {
-      state.samples1++;
-      if (detectAndDraw(v1, UI.c1, UI.vc1, 'lastSampleT1')) state.poses1++;
-    }
-    if (v2 && UI.blue.checked) {
-      state.samples2++;
-      if (detectAndDraw(v2, UI.c2, UI.vc2, 'lastSampleT2')) state.poses2++;
+      const t=v2.currentTime;
+      if(poseState.lastT2<0 || (t-poseState.lastT2)>=step){
+        poseState.lastT2=t;
+        poseState.samples2++;
+        const rect=containRect(PoseUI.c2.width,PoseUI.c2.height, v2.videoWidth||1, v2.videoHeight||1);
+        const res=poseLandmarker.detectForVideo(v2, Math.round(t*1000));
+        if(res?.landmarks?.length){
+          poseState.poses2++;
+          drawSkeleton(ctx,rect,res.landmarks[0],0.22);
+        }
+      }
     }
 
-    setPoseStat(
-      `on · fps=${desiredFps()} · red ${state.poses1}/${state.samples1} · blue ${state.poses2}/${state.samples2}`
-    );
+    setPoseStat(`on · fps=${fps} · red ${poseState.poses1}/${poseState.samples1} · blue ${poseState.poses2}/${poseState.samples2}`);
   }
 };
+
+/* =========================
+   Initial map placeholder
+========================= */
+(function initEmptyMap(){
+  map = L.map('map', {zoomControl:true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+  }).addTo(map);
+  map.setView([63.4305,10.3951], 12); // Trondheim-ish default
+})();
+log("Ready. Select MP4s and run Analyze.");
 </script>
+
 </body>
 </html>
